@@ -1,0 +1,182 @@
+import os
+import re
+import pandas as pd
+import chromadb
+from chromadb.utils import embedding_functions
+from pathlib import Path
+from tqdm import tqdm
+import json  # 用于格式化输出JSON
+
+# 儿科500条样本
+os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
+MEDICAL_DATA_DIR = r"D:\software\software engineering\project"
+BGE_MODEL_NAME = "BAAI/bge-small-zh-v1.5"
+COLLECTION_NAME = "pediatric_sample_500"
+CHROMA_STORAGE_PATH = "./chroma_pediatric_sample"
+
+  #疾病提取正则
+FILE_DEPARTMENT_MAP = {
+    "儿科5-14000.csv": "Pediatric_儿科"
+}
+
+DISEASE_PATTERN = re.compile(
+    r'((高|低|急|慢|重|轻|先|后|原|继|良|恶)?[\u4e00-\u9fa5]{2,15}?(?:病|症|炎|综合征|瘤|癌|疮|中毒|感染|障碍|缺损|畸形|麻痹|痉挛|出血|梗死|硬化|萎缩|增生|结石|溃疡|疝|脓肿|积液|热|痛|癣|疹|瘫|疸|盲|聋|痹|痨|痢|癣|疣|痔))',
+    re.IGNORECASE
+)
+
+
+
+# 加载儿科数据（500条）
+def load_pediatric_data(data_dir):
+    all_dfs = []
+    print("开始加载儿科数据（500条样本）...")
+    for filename, department in FILE_DEPARTMENT_MAP.items():
+        file_path = Path(data_dir) / filename
+        with open(file_path, "r", encoding="gbk", errors="ignore") as f:
+            df = pd.read_csv(f)
+        df.columns = ["department", "title", "ask", "answer"]
+        df = df.head(500)
+        all_dfs.append(df)
+        print(f"加载 {department}：{len(df)} 条数据")
+    merged_df = pd.concat(all_dfs, ignore_index=True)
+    print(f"数据加载完成，总样本量：{len(merged_df)} 条")
+    return merged_df
+
+
+
+# 数据清洗
+def clean_data(df):
+    print("\n开始数据清洗...")
+
+    def fix_quotes(text):
+        if pd.isna(text):
+            return "None"
+        return str(text).replace('“', '"').replace('”', '"').strip()
+
+    text_cols = ["title", "ask", "answer", "department"]
+    for col in text_cols:
+        df[col] = df[col].apply(fix_quotes)
+    df = df.dropna(subset=["ask", "answer"])
+    df = df.fillna("None")
+    print(f"清洗完成，剩余数据：{len(df)} 条")
+    return df
+
+
+
+# 提取相关疾病
+def extract_diseases(df):
+    print("\n开始提取相关疾病...")
+
+    def extract(row):
+        combined_text = f"{row['title']} {row['ask']} {row['answer']}"
+        diseases = DISEASE_PATTERN.findall(combined_text)
+        unique_diseases = list(set([d[0] for d in diseases if len(d[0]) >= 2]))
+        return unique_diseases if unique_diseases else ["无明确相关疾病"]
+
+    tqdm.pandas(desc="疾病提取进度")
+    df["related_disease"] = df.progress_apply(extract, axis=1)
+    return df
+
+# 初始化Chroma
+def init_chroma_sample():
+    print("\n初始化Chroma向量数据库...")
+    client = chromadb.PersistentClient(path=CHROMA_STORAGE_PATH)
+    if COLLECTION_NAME in [col.name for col in client.list_collections()]:
+        client.delete_collection(COLLECTION_NAME)
+    bge_ef = embedding_functions.SentenceTransformerEmbeddingFunction(model_name=BGE_MODEL_NAME)
+    collection = client.create_collection(
+        name=COLLECTION_NAME,
+        embedding_function=bge_ef,
+        metadata={"description": "严格按指定格式存储的儿科样本"}
+    )
+    return collection
+
+# 存入Chroma
+def save_to_chroma(collection, df):
+    print("\n存入数据（按向量数据库格式处理）...")
+    # 1. id：字符串类型（如"1" "2"）
+    ids = [str(i + 1) for i in range(len(df))]  # 符合Chroma的字符串id要求
+
+    # 2. text：医生回答
+    texts = df["answer"].tolist()
+
+    # 3. metadata：相关疾病转为逗号字符串（存入Chroma），其他字段直接存储
+    metadatas = [
+        {
+            "department": row["department"],
+            "related_disease": ",".join(row["related_disease"]),  # 列表转字符串（Chroma要求）
+            "title": row["title"],
+            "query": row["ask"]
+        }
+        for _, row in df.iterrows()
+    ]
+
+    collection.add(ids=ids, documents=texts, metadatas=metadatas)
+    print(f"数据存入完成，总条数：{collection.count()}")
+    return ids, texts, metadatas  # 返回原始数据用于验证
+
+# 展示数据
+def show_vector_format(ids, texts, metadatas):
+    print("\n\n向量数据库中数据的标准格式（前2条）")
+    for i in range(2):  # 展示前2条
+        vector_data = {
+            "id": ids[i],  # 字符串id
+            "metadata": {
+                "department": metadatas[i]["department"],
+                "related_disease": metadatas[i]["related_disease"].split(","),  # 转回列表
+                "title": metadatas[i]["title"],
+                "query": metadatas[i]["query"]
+            },
+            "text": texts[i]
+        }
+        # 用json.dumps格式化输出（带缩进，清晰展示结构）
+        print(json.dumps(vector_data, ensure_ascii=False, indent=2))
+        print("-" * 80)  # 分隔线
+
+
+# 按格式查询并展示结果
+def query_and_show(collection):
+    print("\n\n===== 按格式查询结果展示 =====")
+    query = "宝宝发烧38度怎么办？"
+    print(f"查询问题：{query}\n")
+
+    # 查询（不指定ids，默认返回）
+    results = collection.query(
+        query_texts=[query],
+        n_results=2,
+        include=["documents", "metadatas", "distances"]
+    )
+
+    # 按标准格式解析结果
+    for i in range(2):
+        # 从结果中提取数据并构造格式
+        result_data = {
+            "id": results["ids"][0][i],  # 默认返回的id（字符串）
+            "metadata": {
+                "department": results["metadatas"][0][i]["department"],
+                "related_disease": results["metadatas"][0][i]["related_disease"].split(","),  # 转回列表
+                "title": results["metadatas"][0][i]["title"],
+                "query": results["metadatas"][0][i]["query"]
+            },
+            "text": results["documents"][0][i]
+        }
+        # 格式化输出
+        print(f"第{i + 1}条结果（相似度：{1 - results['distances'][0][i]:.4f}）：")
+        print(json.dumps(result_data, ensure_ascii=False, indent=2))
+        print("-" * 80)
+
+if __name__ == "__main__":
+    # 加载→清洗→提取疾病
+    df = load_pediatric_data(MEDICAL_DATA_DIR)
+    df = clean_data(df)
+    df = extract_diseases(df)
+
+    # 初始化→存入Chroma
+    collection = init_chroma_sample()
+    ids, texts, metadatas = save_to_chroma(collection, df)
+
+    # 展示
+    show_vector_format(ids, texts, metadatas)
+
+    # 查询并按格式展示结果
+    query_and_show(collection)
