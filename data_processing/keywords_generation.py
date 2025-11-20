@@ -4,7 +4,7 @@ import os
 API_KEY = os.getenv("MEDICAL_RAG")
 
 class keywords_generator:
-    def __init__(self, api_key):
+    def __init__(self, api_key=API_KEY):
         self.client = ZhipuAiClient(api_key=api_key)
     def generate(self, query):
         response = self.client.chat.completions.create(
