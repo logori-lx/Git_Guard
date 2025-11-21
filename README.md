@@ -11,3 +11,11 @@ curl -X POST http://localhost:8080/api/user/ask
   -H "Content-Type: application/json" 
   -d '{"question": "得了高血压平时需要注意什么？"}'
 ```
+# FrontEnd Usage
+1. Install dependencies
+npm install
+2. Run the frontend
+npm run dev
+Frontend will run on:
+
+➡️ http://localhost:5173/
