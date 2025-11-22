@@ -44,8 +44,12 @@ class ChromaStore:
     def load_data(self, file_path):
         """从CSV文件加载数据"""
         df = pd.read_csv(file_path)
-        # 去除空缺值
-        df = df.dropna()
+        print(f"{file_path} 原始数据行数：{len(df)}")
+    
+        # 只删除关键列（title/department/answer）为空的行，其他列空值保留
+        df = df.dropna(subset=["title", "department", "answer"])
+        
+        print(f"{file_path} 过滤后数据行数：{len(df)}")
         return df
 
     def store_data(self, batch_size=64):
