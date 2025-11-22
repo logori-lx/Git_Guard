@@ -4,7 +4,7 @@ from typing import List, Dict
 from pyparsing import Enum
 from zai import ZhipuAiClient  # 确保 zai.py 在PYTHONPATH中
 import pandas as pd
-import query_processor
+from query_constructing.query_constructor import QueryConstructor
 from llama_index.core import Document
 from llama_index.retrievers.bm25 import BM25Retriever
 from llama_index.core.node_parser import SentenceSplitter
@@ -53,7 +53,7 @@ class ZhipuEmbeddingFunction:
         return self.__call__(input)
     
 class Retrieval:
-    def __init__(self, collection_name= COLLECTION_NAME, embedding_function = ZhipuEmbeddingFunction()):
+    def __init__(self, query_constructor: QueryConstructor, collection_name= COLLECTION_NAME, embedding_function = ZhipuEmbeddingFunction()):
         self.client = chromadb.PersistentClient(path=DB_PATH)
         self.collection_name = collection_name
         self.embedding_function = embedding_function
@@ -62,6 +62,7 @@ class Retrieval:
             name=collection_name,
             embedding_function=embedding_function
         )
+        self.query_constructor = query_constructor
         
     def jaccard_similarity(self,word1, word2):
         set1 = set(word1)
@@ -107,7 +108,7 @@ class Retrieval:
         :param top_k: 返回的Top-K结果数量
         :return: 包含文档ID、距离和元数据的列表
         """
-        keywords_in_query = query_processor.query_processor(query)["keywords"]
+        keywords_in_query = self.query_constructor.extract_category(query)
         if len(keywords_in_query) == 0 or keywords_in_query[0] == '无':
             return False
         or_expression_list = []
@@ -196,24 +197,25 @@ class Retrieval:
         """
         # 提取通用参数（top_k默认值根据检索类型调整）
         top_k = kwargs.get("top_k", 5)
-        
+        rewritten_query = self.query_constructor.get_query(query)
         # 匹配检索类型，调用对应方法
         if retrieval_type == RetrievalMethod.VECTOR.value:
-            return self.vector_retrieve(query, top_k=top_k)
+            return self.vector_retrieve(rewritten_query, top_k=top_k)
         elif retrieval_type == RetrievalMethod.HYBRID.value:
-            return self.hybrid_retrieve(query, top_k=top_k)
+            return self.hybrid_retrieve(rewritten_query, top_k=top_k)
         elif retrieval_type == RetrievalMethod.BM25.value:
             # BM25的top_k单独控制（默认3）
             bm25_top_k = kwargs.get("bm25_top_k", 3)
-            return self.bm25_retrieve(query, top_k=bm25_top_k)
+            return self.bm25_retrieve(rewritten_query, top_k=bm25_top_k)
         else:
             raise ValueError(f"不支持的检索类型：{retrieval_type}，可选值：vector/keywords/hybrid/bm25")
     
 if __name__ == "__main__":
     query = "糖尿病的症状有哪些？"
     top_k = 3
-    retriever = Retrieval()
-    results = retriever.bm25_retrieve(query, top_k=3) 
+    retriever = Retrieval(query_constructor= QueryConstructor())
+    query_constructor = QueryConstructor()
+    results = retriever.retrieve(RetrievalMethod.BM25.value,query,top_k = 3)
     results_final = [i.text for i in results]
     for i in range(len(results_final)):
         print(f"{i+1}.______ {results_final[i]}\n")
