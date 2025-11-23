@@ -9,6 +9,7 @@ python disease_name_preprocess.py
 python data_preprocessing.py
 ```
 # Backend Usage
+## Method1
 Before running server you need to set the api_key of 智谱清言 in evironmental variable
 ```
 MEDICAL_RAG= {your api key you get from https://bigmodel.cn/}
@@ -22,6 +23,16 @@ start server:
 ```
 cd backend && uvicorn main:app --reload --host 0.0.0.0 --port 8080
 ```
+## Method2
+build your docker image
+```
+cd backend && docker build . -t backend
+```
+run server in docker
+```
+docker run -d   --name backend   -p 8080:8080    -e "MEDICAL_RAG={fill your api key you get from 智谱清言}"    backend:latest
+```
+## Check server start or not
 post request
 ```
 curl -X POST http://localhost:8080/api/user/ask 

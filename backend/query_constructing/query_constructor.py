@@ -1,8 +1,7 @@
-import pandas as pd
 from zai import ZhipuAiClient
 import os
 from collections import deque
-from typing import List, Dict, Tuple
+from typing import List, Dict
 API_KEY = os.getenv("MEDICAL_RAG")
 REWRITTEN_QUERY_CACHE_SIZE = 10
 class QueryConstructor:

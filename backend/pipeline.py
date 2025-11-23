@@ -1,7 +1,6 @@
 import os
 from typing import List, Dict, Tuple, Optional
 from query_constructing.query_constructor import QueryConstructor
-mode = os.getenv("LAW_RAG_OPERATION_MODE")
 from retrieve.retrieval import Retrieval, RetrievalMethod
 from retrieve.rerank import Reranker
 
