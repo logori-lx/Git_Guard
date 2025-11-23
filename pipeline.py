@@ -13,7 +13,7 @@ _query_constructor: Optional[QueryConstructor] = None
 def _get_query_constructor() ->QueryConstructor:
     global _query_constructor
     if _query_constructor is None:
-        api_key = os.getenv("ZHIPU_API_KEY")
+        api_key = os.getenv("MEDICAL_RAG")
         _query_constructor = QueryConstructor(api_key=api_key)
     return _query_constructor
 

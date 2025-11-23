@@ -12,7 +12,7 @@ class Query(BaseModel):
     question: str
 
 
-@app.post("/api/ask")
+@app.post("/api/user/ask")
 async def ask_question(query: Query) -> Dict[str, Any]:
     answer, context = retrieve_and_generate(query.question)
     return {"answer": answer, "context": context}

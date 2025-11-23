@@ -9,9 +9,14 @@ python disease_name_preprocess.py
 python data_preprocessing.py
 ```
 # Backend Usage
+Before running server you need to set the api_key of 智谱清言 in evironmental variable
+```
+MEDICAL_RAG= {your api key you get from https://bigmodel.cn/}
+```
+
 start server:
 ```
-cd project && uvicorn main:app --reload --host 0.0.0.0 --port 8000
+cd project && uvicorn main:app --reload --host 0.0.0.0 --port 8080
 ```
 post request
 ```
