@@ -27,7 +27,7 @@ API_KEY = os.getenv("MEDICAL_RAG")
 COLLECTION_NAME = "medical_db"
 # 解决路径问题
 KEYWORDS_FILE = os.path.join(root_path,"retrieve","disease_names_processed.csv")
-DB_PATH = os.path.join(root_path,"data_processing","DATA","chroma_db")
+DB_PATH = os.path.join(root_path,"DATA","chroma_db")
 
 
 class RetrievalMethod(Enum):

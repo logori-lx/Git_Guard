@@ -1,9 +1,10 @@
 .vscode
 __pycache__
-data_processing/DATA/
+backend/data_processing/DATA/
 *.ipynb
 data_processing/original_data/*.csv
 data_processing/processed_data/*.csv
 data_processing/DATA
 data_processing/API_KEY.txt
+backend/DATA
 .venv/
