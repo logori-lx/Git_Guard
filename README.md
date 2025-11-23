@@ -13,7 +13,11 @@ Before running server you need to set the api_key of 智谱清言 in evironmenta
 ```
 MEDICAL_RAG= {your api key you get from https://bigmodel.cn/}
 ```
-
+Then place database to project/data_processing/DATA
+```
+// path should be existed below
+data_processing\DATA\chroma_db
+```
 start server:
 ```
 cd project && uvicorn main:app --reload --host 0.0.0.0 --port 8080
