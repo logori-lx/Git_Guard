@@ -1,24 +1,29 @@
-// src/services/chat.ts
 import axios from "axios";
 
+export interface ReferenceCase {
+  id: number;
+  question: string;
+  answer: string;
+}
+
+// 后端原始返回结构
+export interface RawResponse {
+  response: string;
+  cases?: ReferenceCase[];
+}
+
+// 给前端 UI 用的结构
 export interface AskResponse {
   response: string;
-  context?: string[];
+  referenceCases: ReferenceCase[];
 }
 
 export async function askQuestion(question: string): Promise<AskResponse> {
   const resp = await axios.post("/api/user/ask", { question });
-  // 假设后端返回 { response, context }
-  return resp.data as AskResponse;
-}
+  const data = resp.data as RawResponse;
 
-/* Advanced: 文件上传示例（占位）
-export async function uploadFile(file: File) {
-  const fd = new FormData();
-  fd.append("file", file);
-  const resp = await axios.post("/api/user/upload", fd, {
-    headers: { "Content-Type": "multipart/form-data" },
-  });
-  return resp.data;
+  return {
+    response: data.response,
+    referenceCases: Array.isArray(data.cases) ? data.cases : [],
+  };
 }
-*/
