@@ -21,7 +21,7 @@ backend\DATA\chroma_db
 ```
 start server:
 ```
-cd backend && uvicorn main:app --reload --host 0.0.0.0 --port 8080
+cd backend && uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 ## Method2
 build your docker image
@@ -30,12 +30,12 @@ cd backend && docker build . -t backend
 ```
 run server in docker
 ```
-docker run -d   --name backend   -p 8080:8080    -e "MEDICAL_RAG={fill your api key you get from 智谱清言}"    backend:latest
+docker run -d   --name backend   -p 8000:8000    -e "MEDICAL_RAG={fill your api key you get from 智谱清言}"    backend:latest
 ```
 ## Check server start or not
 post request
 ```
-curl -X POST http://localhost:8080/api/user/ask 
+curl -X POST http://localhost:8000/api/user/ask 
   -H "Content-Type: application/json" 
   -d '{"question": "得了高血压平时需要注意什么？"}'
 ```
@@ -44,6 +44,5 @@ curl -X POST http://localhost:8080/api/user/ask
 npm install
 2. Run the frontend
 npm run dev
-Frontend will run on:
-
+Frontend will listen to 8000 port and run on:
 ➡️ http://localhost:5173/

@@ -7,7 +7,7 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://localhost:8080', // ← mock 后端端口
+        target: 'http://localhost:8000', // ← mock 后端端口
         changeOrigin: true,
         secure: false
       }

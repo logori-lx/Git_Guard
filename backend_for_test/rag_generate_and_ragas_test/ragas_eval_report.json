@@ -1,0 +1,5 @@
+{
+  "context_recall": 0.6065396023729357,
+  "faithfulness": 0.6440998349810597,
+  "factual_correctness(mode=f1)": 0.5866666666666666
+}
