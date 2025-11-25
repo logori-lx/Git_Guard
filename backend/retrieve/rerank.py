@@ -7,7 +7,7 @@ root_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(root_path)
 from retrieve.retrieval import Retrieval, RetrievalMethod
 from query_constructing.query_constructor import QueryConstructor
-# try
+
 
 API_KEY = os.getenv("MEDICAL_RAG")
 

@@ -6,14 +6,14 @@ from chromadb.utils import embedding_functions
 from pathlib import Path
 from tqdm import tqdm
 
-# Configuration Parameters
-os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"  # Disable symbolic link warnings
-MEDICAL_DATA_DIR = r"D:\software\software engineering\project"  # Data Root directory
-BGE_MODEL_NAME = "BAAI/bge-small-zh-v1.5"  # Chinese Medical Embedding Model
-COLLECTION_NAME = "medical_qa_chroma"  # Chroma collection name
-CHROMA_STORAGE_PATH = "./chroma_medical_data"  # Vector Data Storage path
+# 配置参数
+os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"  # 禁用符号链接警告
+MEDICAL_DATA_DIR = r"D:\software\software engineering\project"  # 数据根目录
+BGE_MODEL_NAME = "BAAI/bge-small-zh-v1.5"  # 中文医疗嵌入模型
+COLLECTION_NAME = "medical_qa_chroma"  # Chroma集合名
+CHROMA_STORAGE_PATH = "./chroma_medical_data"  # 向量数据存储路径
 
-# File Name and Department Mapping
+# 文件名与科室映射
 FILE_DEPARTMENT_MAP = {
     "男科5-13000.csv": "Andriatria_男科",
     "内科5000-33000.csv": "IM_内科",
@@ -23,132 +23,131 @@ FILE_DEPARTMENT_MAP = {
     "外科5-14000.csv": "Surgical_外科"
 }
 
-# Disease extraction Regular expressions
+# 疾病提取正则
 DISEASE_PATTERN = re.compile(
-    r'((High|Low|Acute|Slow|Severe|Mild|Primary|Secondary|Original|Subsequent|Good|Bad)?[A-Za-z]{2,15}?(?:Disease|Syndrome|Inflammation|Tumor|Cancer|Ulcer|Poisoning|Infection|Disorder|Defect|Malformation|Paralysis|Spasm|Hemorrhage|Infarction|Sclerosis|Atrophy|Hyperplasia|Calculus|Abscess|Effusion|Fever|Pain|Dermatitis|Rash|Paralysis|Jaundice|Blindness|Deafness|Palsy|Tuberculosis|Dysentery|Wart|Hemorrhoid))',
+    r'((高|低|急|慢|重|轻|先|后|原|继|良|恶)?[\u4e00-\u9fa5]{2,15}?(?:病|症|炎|综合征|瘤|癌|疮|中毒|感染|障碍|缺损|畸形|麻痹|痉挛|出血|梗死|硬化|萎缩|增生|结石|溃疡|疝|脓肿|积液|热|痛|癣|疹|瘫|疸|盲|聋|痹|痨|痢|癣|疣|痔))',
     re.IGNORECASE
 )
 
 
 
-
-# Load medical Q&A data
+# 加载医疗问答数据
 def load_medical_data(data_dir):
     all_dfs = []
-    print(f"Start loading the medical Q&A data")
+    print(f"开始加载医疗问答数据")
     for filename, department in FILE_DEPARTMENT_MAP.items():
         file_path = Path(data_dir) / filename
-        print(f"Loading {filename}...")
+        print(f"正在加载 {filename}...")
 
-        # Use the open function to specify the encoding and error handling, and then pass it to read_csv
+        # 用open函数指定编码和错误处理，再传给read_csv
         with open(file_path, "r", encoding="gbk", errors="ignore") as f:
             df = pd.read_csv(f)
 
-        # Unified listing
+        # 统一列名
         df.columns = ["department", "title", "ask", "answer"]
         all_dfs.append(df)
-        print(f"Loading {department}：{len(df)} piece of data")
+        print(f"加载 {department}：{len(df)} 条数据")
 
-    # Merge all the data and reset the index
+    # 合并所有数据并重置索引
     merged_df = pd.concat(all_dfs, ignore_index=True)
-    print(f"\nThe data loading is complete. The total number of entries after merging: {len(merged_df)}")
+    print(f"\n数据加载完成，合并后总条数：{len(merged_df)}")
     return merged_df
 
 
 
-# Data Cleaning
+# 数据清洗
 def clean_medical_data(df):
-    print("\nStart data cleaning...")
+    print("\n开始数据清洗...")
 
-    # Chinese double quotation marks to English double quotation marks
+    # 中文双引号转英文双引号
     def fix_quotes(text):
         if pd.isna(text):
             return text
         return str(text).replace('“', '"').replace('”', '"').strip()
 
-    # Apply to all text columns
+    # 应用于所有文本列
     text_cols = ["title", "ask", "answer", "department"]
     for col in text_cols:
         df[col] = df[col].apply(fix_quotes)
 
-    # Handle null values: Delete the core fields (ask/answer) if they are empty, and fill the other fields with None
-    df = df.dropna(subset=["ask", "answer"])  # Delete invalid lines without Q&A content
-    df = df.fillna("None")  # Other empty columns are filled with None
-    df = df.replace("", "None")  # Convert an empty string to None
+    # 处理空值：核心字段（ask/answer）为空则删除，其他字段填充None
+    df = df.dropna(subset=["ask", "answer"])  # 删除无问答内容的无效行
+    df = df.fillna("None")  # 其他空列填充None
+    df = df.replace("", "None")  # 空字符串转为None
 
-    # duplicate removal
+    # 去重
     df = df.drop_duplicates(subset=["ask", "answer"], keep="first")
 
-    print(f"The cleaning is complete. Only valid data remains ：{len(df)} pieces")
+    print(f"清洗完成，剩余有效数据：{len(df)} 条")
     return df
 
 
 
-# 3. Extract related diseases
+# 3. 提取相关疾病
 def extract_related_diseases(df):
-    print("\nStart extracting related diseases (optimize regular expressions to cover more disease types)...")
+    print("\n开始提取相关疾病（优化正则，覆盖更多疾病类型）...")
 
     def extract_disease_from_text(row):
-        # Merge the title, question and answer texts
+        # 合并标题、提问、回答文本
         combined_text = f"{row['title']} {row['ask']} {row['answer']}"
-        # Regular matching disease
+        # 正则匹配疾病
         diseases = DISEASE_PATTERN.findall(combined_text)
-        # Extract the disease names from the matching results, remove duplicates and filter out noise
-        unique_diseases = list(set([d[0] for d in diseases if len(d[0]) >= 2 and not d[0].endswith("Minor illness")]))
-        # Return the default value when there is no matching result
-        return unique_diseases if unique_diseases else ["There is no clear related disease"]
+        # 提取匹配结果中的疾病名称，去重+过滤噪声
+        unique_diseases = list(set([d[0] for d in diseases if len(d[0]) >= 2 and not d[0].endswith("小病")]))
+        # 无匹配结果时返回默认值
+        return unique_diseases if unique_diseases else ["无明确相关疾病"]
 
-    # Batch extraction
-    tqdm.pandas(desc="Progress of disease extraction")
+    # 批量提取
+    tqdm.pandas(desc="疾病提取进度")
     df["related_disease"] = df.progress_apply(extract_disease_from_text, axis=1)
 
-    print("Disease extraction completed")
+    print("疾病提取完成")
     return df
 
 
-# Initialize the Chroma vector database
+# 初始化Chroma向量数据库
 def init_chroma():
-    print("\nInitialize the Chroma vector database...")
-    # Create a persistent client
+    print("\n初始化Chroma向量数据库...")
+    # 创建持久化客户端
     client = chromadb.PersistentClient(path=CHROMA_STORAGE_PATH)
 
-    # Configure the Chinese embedding function (BGE-small-zh-v1.5)
+    # 配置中文嵌入函数（BGE-small-zh-v1.5）
     bge_ef = embedding_functions.SentenceTransformerEmbeddingFunction(
         model_name=BGE_MODEL_NAME
     )
 
-    # Create/obtain a collection
+    # 创建/获取集合
     collection = client.get_or_create_collection(
         name=COLLECTION_NAME,
         embedding_function=bge_ef,
-        metadata={"description": "Medical Q&A dataset"}
+        metadata={"description": "医疗问答数据集"}
     )
 
-    print(f"Chroma initialization is complete. Collection name: {COLLECTION_NAME}")
+    print(f"Chroma初始化完成，集合名：{COLLECTION_NAME}")
     return collection
 
 
 
-# 5. Store in the Chroma vector database (list to string, adapted metadata format)
+# 5. 存入Chroma向量数据库（列表转字符串，适配元数据格式）
 def save_to_chroma(collection, df):
-    print("\nStart saving data to Chroma...")
+    print("\n开始向Chroma存入数据...")
 
     # 构造Chroma所需格式：ids、documents、metadatas
-    ids = [str(i + 1) for i in range(len(df))]  # The ID increments from 1
-    documents = df["answer"].tolist()  # The doctor's response serves as the core content of the search
+    ids = [str(i + 1) for i in range(len(df))]  # ID从1开始自增
+    documents = df["answer"].tolist()  # 医生回答作为检索核心内容
     metadatas = [
         {
             "department": row["department"],
-            "related_disease": ",".join(row["related_disease"]),  # List to String
+            "related_disease": ",".join(row["related_disease"]),  # 列表转字符串
             "title": row["title"],
-            "query": row["ask"]  # User questions are stored in metadata for easy viewing
+            "query": row["ask"]  # 用户提问存入元数据，方便查看
         }
         for _, row in df.iterrows()
     ]
 
-    # Store in batches
+    # 分批存入
     batch_size = 1000
-    for i in tqdm(range(0, len(ids), batch_size), desc="Save progress"):
+    for i in tqdm(range(0, len(ids), batch_size), desc="存入进度"):
         batch_ids = ids[i:i + batch_size]
         batch_docs = documents[i:i + batch_size]
         batch_metas = metadatas[i:i + batch_size]
@@ -158,22 +157,22 @@ def save_to_chroma(collection, df):
             metadatas=batch_metas
         )
 
-    print(f"The data storage has been completed. The total number of entries in the collection：{collection.count()}")
+    print(f"数据存入完成，集合中总条数：{collection.count()}")
 
 
-# Query from Chroma
+# 从Chroma查询
 def query_chroma(collection, query_text, top_k=3):
-    """Query the question-and-answer pairs most similar to medical questions and return normal Chinese results"""
+    """查询与医疗问题最相似的问答对，返回正常中文结果"""
     results = collection.query(
         query_texts=[query_text],
         n_results=top_k,
-        include=["documents", "metadatas", "distances"]  # There is no need to explicitly specify ids
+        include=["documents", "metadatas", "distances"]  # 无需显式指定ids
     )
 
-    # The sorting result: The string is converted back to the list, and the display format is adapted
+    # 整理结果：字符串转回列表，适配显示格式
     formatted_results = []
     for i in range(len(results["ids"][0])):
-        # Convert the disease string back to the list
+        # 疾病字符串转回列表
         related_diseases = results["metadatas"][0][i]["related_disease"].split(",")
         formatted_results.append({
             "id": results["ids"][0][i],
@@ -181,49 +180,49 @@ def query_chroma(collection, query_text, top_k=3):
             "department": results["metadatas"][0][i]["department"],
             "user_query": results["metadatas"][0][i]["query"],
             "doctor_answer": results["documents"][0][i],
-            "similarity": 1 - results["distances"][0][i]  # Distance to similarity
+            "similarity": 1 - results["distances"][0][i]  # 距离转相似度
         })
     return formatted_results
 
 if __name__ == "__main__":
     if Path(CHROMA_STORAGE_PATH).exists():
-        print(f"An old data folder was found{CHROMA_STORAGE_PATH}, please delete it manually before running!")
-        print("(The old data contains garbled characters or encoding anomalies and must be cleared before new data can be stored.)")
+        print(f"⚠️  发现旧数据文件夹 {CHROMA_STORAGE_PATH}，请手动删除后再运行！")
+        print("   （旧数据含乱码或编码异常，必须清空才能存储新数据）")
         exit()
 
-    # Load the merged data
+    # 加载合并数据
     medical_df = load_medical_data(MEDICAL_DATA_DIR)
 
-    # Data cleaning (handling quotation marks, null values, and deduplication)
+    # 数据清洗（处理引号、空值、去重）
     cleaned_df = clean_medical_data(medical_df)
 
-    # Extract related diseases (regularization)
+    # 提取相关疾病（正则）
     final_df = extract_related_diseases(cleaned_df)
 
-    # Initialize the Chroma vector database
+    # 初始化Chroma向量数据库
     chroma_collection = init_chroma()
 
-    # store into Chroma
+    # 存入Chroma
     save_to_chroma(chroma_collection, final_df)
 
-    # Query verification
+    # 查询验证
     test_queries = [
-        "Can patients with hypertension take Codonopsis pilosula?",
-        "How to care for a pediatric baby with a fever?",
-        "What are the causes of menstrual disorders in obstetrics and gynecology?",
-        "What should cancer patients in the oncology department pay attention to in their diet?"
+        "高血压患者能吃党参吗？",
+        "儿科宝宝发烧怎么护理？",
+        "妇产科月经不调的原因有哪些？",
+        "肿瘤科癌症患者饮食需要注意什么？"
     ]
 
-    # Execute the test query and print the results
+    # 执行测试查询并打印结果
     for query in test_queries:
         print("\n" + "=" * 60)
-        print(f"Query question: {query}")
-        print("The most similar medical Q&A results: ")
+        print(f"查询问题：{query}")
+        print("最相似的医疗问答结果：")
         results = query_chroma(chroma_collection, query, top_k=2)
 
         for i, res in enumerate(results, 1):
-            print(f"\nThe {i} piece（similarity：{res['similarity']:.4f}）")
-            print(f"Department：{res['department']}")
-            print(f"Related diseases：{', '.join(res['related_disease'])}")
-            print(f"User's question：{res['user_query']}")
-            print(f"The doctor replied：{res['doctor_answer'][:100]}...")  # Extract the first 100 characters to avoid making the output too long
+            print(f"\n第{i}条（相似度：{res['similarity']:.4f}）")
+            print(f"科室：{res['department']}")
+            print(f"相关疾病：{', '.join(res['related_disease'])}")
+            print(f"用户提问：{res['user_query']}")
+            print(f"医生回答：{res['doctor_answer'][:100]}...")  # 截取前100字，避免输出过长
