@@ -21,11 +21,19 @@ export default function ChatPage() {
   // 前端打字机动画中
   const [isTyping, setIsTyping] = useState(false);
 
+  // ✅ 新增：是否展示左侧历史
+  const [showHistory, setShowHistory] = useState(true);
+
   /* -------------------- 初始化 -------------------- */
   useEffect(() => {
     startNewSession();
     const saved = JSON.parse(localStorage.getItem("chat-history") || "[]");
     setHistory(saved);
+
+    // 小屏默认隐藏历史
+    if (window.innerWidth < 900) {
+      setShowHistory(false);
+    }
   }, []);
 
   /* -------------------- 保存当前会话到本地 -------------------- */
@@ -116,19 +124,19 @@ export default function ChatPage() {
     setIsSending(true);
 
     try {
-      // ✅ 现在 askQuestion 返回的是 { answer, context }
-      const res = await askQuestion(text);
+      const res: any = await askQuestion(text);
 
-      const aiAnswer = res.answer ?? "";
-      const rawContext = Array.isArray(res.context) ? res.context : [];
-
-      // ✅ 映射成统一的 ReferenceCase 结构，方便 UI 使用
-      const referenceCases = rawContext.map((c: any, index: number) => ({
-        id: index + 1,
-        question: c.ask ?? "",
-        answer: c.answer ?? "",
-        department: c.department ?? "",
-      }));
+      // 按你最新后端结构解析：answer + context[ ]（ask/answer/department）
+      const rawCases = Array.isArray(res.context) ? res.context : [];
+      const referenceCases =
+        rawCases.length > 0
+          ? rawCases.map((c: any, index: number) => ({
+              id: index + 1,
+              question: c.ask ?? "",
+              answer: c.answer ?? "",
+              department: c.department ?? "",
+            }))
+          : [];
 
       const finalId = uuidv4();
 
@@ -139,10 +147,9 @@ export default function ChatPage() {
             ? {
                 id: finalId,
                 role: "assistant",
-                text: aiAnswer,
-                referenceCases: referenceCases.length
-                  ? referenceCases
-                  : undefined,
+                text: res.answer ?? "",
+                referenceCases:
+                  referenceCases.length > 0 ? referenceCases : undefined,
               }
             : m
         )
@@ -170,7 +177,6 @@ export default function ChatPage() {
     }
   };
 
-
   /* -------------------- 找到需要打字机的最后一条回答 -------------------- */
   const lastAssistant = [...messages]
     .filter((m) => m.role === "assistant" && !m.loading)
@@ -179,49 +185,68 @@ export default function ChatPage() {
 
   const inputDisabled = isSending || isTyping;
 
+  /* -------------------- 切换历史显示 -------------------- */
+  const toggleHistory = () => {
+    setShowHistory((v) => !v);
+  };
+
   return (
     <div className="app-shell">
       {/* 顶部 */}
       <header className="header">
         <div className="header-inner">
-          <h1>Medical RAG 医疗健康咨询助手</h1>
-          <p>
-            面向普通用户的专业健康咨询工具，结合检索增强生成（RAG）技术，为常见健康问题提供权威且易懂的回答。
-          </p>
+          <div className="header-top-row">
+            <div>
+              <h1>Medical RAG 医疗健康咨询助手</h1>
+              <p>
+                面向普通用户的专业健康咨询工具，结合检索增强生成（RAG）技术，为常见健康问题提供权威且易懂的回答。
+              </p>
+            </div>
+
+            {/* 右上角：显示 / 隐藏 历史按钮，桌面 & 手机都能用 */}
+<button
+  onClick={() => setShowHistory(!showHistory)}
+  className="toggle-history-btn"
+>
+  {showHistory ? "隐藏历史" : "显示历史"}
+</button>
+          </div>
         </div>
       </header>
 
       <div className="main-container">
-        {/* 左侧历史栏 */}
-        <aside className="sidebar">
-          <div className="sidebar-title">历史会话</div>
+        {/* 左侧历史栏：完全由 showHistory 控制是否渲染 */}
+        {showHistory && (
+          <aside className="sidebar">
+            <div className="sidebar-title">历史会话</div>
 
-          <button className="history-new-btn" onClick={startNewSession}>
-            新对话
-          </button>
+            <button className="history-new-btn" onClick={startNewSession}>
+              新对话
+            </button>
 
-          {history.map((h) => (
-            <div
-              key={h.id}
-              className="history-item"
-              onClick={() => loadHistory(h.id)}
-              title={h.title}
-            >
-              <span className="history-item-title">{h.title}</span>
-              <button
-                className="history-delete-btn"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  deleteHistory(h.id);
-                }}
+            {history.map((h) => (
+              <div
+                key={h.id}
+                className="history-item"
+                onClick={() => loadHistory(h.id)}
+                title={h.title}
               >
-                ×
-              </button>
-            </div>
-          ))}
-        </aside>
+                <span className="history-item-title">{h.title}</span>
+                <button
+                  className="history-delete-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    deleteHistory(h.id);
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </aside>
+        )}
 
-        {/* 右侧聊天区 */}
+        {/* 右侧聊天区（会根据是否有 sidebar 自然铺满剩余宽度） */}
         <div className="chat-container">
           <div className="message-list" id="scroll-container">
             <div className="message-center">
@@ -242,7 +267,6 @@ export default function ChatPage() {
               />
             </div>
 
-            {/* ⭐ 这里就是你要的“编辑中”状态提示，仅在等待后端时显示 */}
             {isSending && (
               <div className="input-status">
                 编辑中…（模型正在生成回答，请稍候）
