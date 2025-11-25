@@ -6,6 +6,6 @@ data_processing/original_data/*.csv
 data_processing/processed_data/*.csv
 data_processing/DATA
 data_processing/API_KEY.txt
-frontend/node_modules
+frontend/node_modules/
 backend/DATA
 .venv/
