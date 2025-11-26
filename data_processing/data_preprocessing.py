@@ -42,7 +42,8 @@ class DataPreprocessor:
             freq = {}
             for disease in diseases:
                 freq[disease] = freq.get(disease, 0) + 1
-            # Sort by frequency (descending order), and if frequencies are the same, sort by order of appearance.
+            # Sort by frequency (descending order), and if frequencies are the same,
+            # sort by order of appearance.
             sorted_diseases = sorted(freq.items(), key=lambda x: (-x[1], diseases.index(x[0])))
             sorted_names = [item[0] for item in sorted_diseases]
             # Take the first N strings; if there are not enough, fill them with empty strings.

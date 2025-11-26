@@ -41,13 +41,13 @@ class Reranker:
                     reranked_doc["rerank_index"] = item["index"]
                     reranked_results.append(reranked_doc)
 
-                print(f"重排序完成，返回前{len(reranked_results)}个结果")
+                print(f"Reordering complete, return the first {len(reranked_results)} results.")
                 return reranked_results
             else:
-                print("重排序API返回格式异常，使用原始排序")
+                print("The reordering API returned a format error; use the original sorting.")
                 return documents[:top_k]
         except Exception as e:
-            print(f"重排序失败: {e}，使用原始排序")
+            print(f"Reordering failed: {e}, use the original sort.")
             return documents[:top_k]
     
     
