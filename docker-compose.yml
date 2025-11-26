@@ -7,7 +7,7 @@ services:
     container_name: backend
     restart: always
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     environment:
       - MEDICAL_RAG=9dd0e61fde9c4ca0b572364dab60050a.08fYd77kKLzXUb8N
     volumes:
