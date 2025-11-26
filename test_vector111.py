@@ -5,7 +5,7 @@ from unittest.mock import Mock, patch
 
 
 def test_disease_pattern_compilation():
-    """测试疾病正则表达式编译"""
+    """Test disease regular expression compilation"""
     pattern = re.compile(
         r'((高|低|急|慢|重|轻|先|后|原|继|良|恶)?[\u4e00-\u9fa5]{2,15}?(?:病|症|炎|综合征|瘤|癌|疮|中毒|感染|障碍|缺损|畸形|麻痹|痉挛|出血|梗死|硬化|萎缩|增生|结石|溃疡|疝|脓肿|积液|热|痛|癣|疹|瘫|疸|盲|聋|痹|痨|痢|癣|疣|痔))',
         re.IGNORECASE
@@ -14,8 +14,8 @@ def test_disease_pattern_compilation():
 
 
 def test_data_loading_simulation():
-    """模拟数据加载功能"""
-    # 创建模拟数据
+    """Simulated data loading function"""
+    # Creating simulation data
     test_data = {
         "department": ["心血管科", "儿科"],
         "title": ["高血压治疗", "小儿发烧"],
@@ -28,29 +28,29 @@ def test_data_loading_simulation():
 
 
 def test_data_cleaning_logic():
-    """测试数据清洗逻辑"""
+    """Test data cleaning logic"""
 
-    # 模拟清洗函数
+    # Simulated cleaning function
     def clean_data(df):
-        # 处理空值
+        # Handling null values
         df = df.fillna("None")
         df = df.replace("", "None")
-        # 去重
+        # Deduplication
         df = df.drop_duplicates(subset=["ask", "answer"])
         return df
 
-    # 测试数据
+    # Test data
     test_df = pd.DataFrame({
         "ask": ["问题1", "问题1", None],
         "answer": ["回答1", "回答1", ""]
     })
 
     cleaned = clean_data(test_df)
-    assert len(cleaned) <= 3  # 可能因为去重而减少
+    assert len(cleaned) <= 3  # The number of duplicates may be reduced.
 
 
 def test_disease_extraction_simple():
-    """简化版疾病提取测试"""
+    """Simplified Disease Extraction Test"""
 
     def extract_diseases(text):
         diseases = []
@@ -73,27 +73,27 @@ def test_disease_extraction_simple():
 
 
 def test_chroma_data_format_conversion():
-    """测试Chroma数据格式转换"""
-    # 测试列表转字符串
+    """Test Chroma data format conversion"""
+    # Test list to string
     diseases = ["高血压", "糖尿病"]
     disease_str = ",".join(diseases)
     assert disease_str == "高血压,糖尿病"
 
-    # 测试字符串转回列表
+    # Test string converted back to list
     diseases_back = disease_str.split(",")
     assert diseases_back == ["高血压", "糖尿病"]
 
 
 def test_batch_processing_calculation():
-    """测试批处理计算"""
+    """Test batch processing calculation"""
     total_items = 2500
     batch_size = 1000
 
-    # 计算批次数
+    # Calculate the number of batches
     num_batches = (total_items + batch_size - 1) // batch_size
     assert num_batches == 3
 
-    # 测试批次划分
+    # Test batch division
     batches = []
     for i in range(0, total_items, batch_size):
         end = min(i + batch_size, total_items)
@@ -104,7 +104,7 @@ def test_batch_processing_calculation():
 
 
 def test_similarity_calculation():
-    """测试相似度计算"""
+    """Test similarity calculation"""
     distance = 0.2
     similarity = 1 - distance
     assert similarity == 0.8
@@ -112,8 +112,8 @@ def test_similarity_calculation():
 
 
 def test_query_result_structure():
-    """测试查询结果结构"""
-    # 模拟查询结果
+    """Test query result structure"""
+    # Simulated query results
     mock_result = {
         "id": "1",
         "department": "心血管科",
@@ -123,13 +123,13 @@ def test_query_result_structure():
         "similarity": 0.95
     }
 
-    # 验证结构完整性
+    # Verify structural integrity
     assert all(key in mock_result for key in
                ["id", "department", "related_disease", "user_query", "doctor_answer", "similarity"])
 
 
 def test_medical_terminology():
-    """测试医学术语"""
+    """Testing medical terminology"""
     departments = ["心血管科", "儿科", "内科", "外科"]
     diseases = ["高血压", "糖尿病", "感冒", "发烧"]
 
@@ -140,28 +140,28 @@ def test_medical_terminology():
 
 
 def test_string_operations():
-    """测试字符串操作"""
+    """Test string operations"""
     text = "  hello  "
     assert text.strip() == "hello"
     assert "高血压".replace("高", "低") == "低血压"
 
 
 def test_pandas_operations():
-    """测试Pandas基本操作"""
+    """Testing basic Pandas operations"""
     df = pd.DataFrame({"a": [1, 2], "b": [3, 4]})
     assert len(df) == 2
     assert df["a"].sum() == 3
 
 
 def test_list_operations():
-    """测试列表操作"""
+    """Test list operations"""
     items = [1, 2, 3]
     assert len(items) == 3
     assert 2 in items
 
 
 def test_dictionary_operations():
-    """测试字典操作"""
+    """Test dictionary operations"""
     data = {"key": "value"}
     assert data["key"] == "value"
     assert "key" in data
@@ -187,9 +187,9 @@ def test_always_pass_5():
     assert [] == []
 
 
-# 运行所有测试
+# Run all tests
 def run_all_tests():
-    """运行所有测试"""
+    """Run all tests"""
     test_functions = [
         test_disease_pattern_compilation,
         test_data_loading_simulation,
@@ -211,26 +211,26 @@ def run_all_tests():
         test_always_pass_5
     ]
 
-    print("运行医疗RAG系统测试...")
+    print("Running medical RAG system test...")
     print("=" * 50)
 
     passed = 0
     for test_func in test_functions:
         try:
             test_func()
-            print(f"✅ {test_func.__name__} 通过")
+            print(f"✅ {test_func.__name__} pass")
             passed += 1
         except Exception as e:
-            print(f"❌ {test_func.__name__} 失败: {e}")
+            print(f"❌ {test_func.__name__} fail: {e}")
 
     print("=" * 50)
-    print(f"测试结果: {passed}/{len(test_functions)} 通过")
+    print(f"test result: {passed}/{len(test_functions)} pass")
 
     if passed == len(test_functions):
-        print("🎉 所有测试通过！")
+        print("🎉 All tests passed!")
         return True
     else:
-        print("❌ 有测试失败")
+        print("❌ Some test failed")
         return False
 
 

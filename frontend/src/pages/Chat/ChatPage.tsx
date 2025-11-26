@@ -16,25 +16,25 @@ export default function ChatPage() {
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [sessionId, setSessionId] = useState("");
 
-  // 后端请求中（等待接口返回）
+  // Backend request in progress (waiting for API response)
   const [isSending, setIsSending] = useState(false);
-  // 前端打字机动画中
+  // In the front-end typewriter animation
   const [isTyping, setIsTyping] = useState(false);
 
-  /* -------------------- 初始化 -------------------- */
+  /* -------------------- initialization -------------------- */
   useEffect(() => {
     startNewSession();
     const saved = JSON.parse(localStorage.getItem("chat-history") || "[]");
     setHistory(saved);
   }, []);
 
-  /* -------------------- 保存当前会话到本地 -------------------- */
+  /* -------------------- Save the current session to local -------------------- */
   useEffect(() => {
     if (!sessionId) return;
     localStorage.setItem("session-" + sessionId, JSON.stringify(messages));
   }, [messages, sessionId]);
 
-  /* -------------------- 更新左侧历史标题 -------------------- */
+  /* -------------------- Update the history titles on the left. -------------------- */
   useEffect(() => {
     if (!sessionId) return;
     const firstUser = messages.find((m) => m.role === "user");
@@ -55,7 +55,7 @@ export default function ChatPage() {
     });
   }, [messages, sessionId]);
 
-  /* -------------------- 新对话 -------------------- */
+  /* -------------------- New Dialogue -------------------- */
   const startNewSession = () => {
     const id = uuidv4();
     setSessionId(id);
@@ -72,7 +72,7 @@ export default function ChatPage() {
     ]);
   };
 
-  /* -------------------- 加载历史会话 -------------------- */
+  /* -------------------- Load historical sessions -------------------- */
   const loadHistory = (id: string) => {
     const saved = JSON.parse(localStorage.getItem("session-" + id) || "[]");
     if (!saved || saved.length === 0) return;
@@ -83,7 +83,7 @@ export default function ChatPage() {
     setMessages(saved);
   };
 
-  /* -------------------- 删除历史会话 -------------------- */
+  /* -------------------- Delete historical sessions -------------------- */
   const deleteHistory = (id: string) => {
     const updated = history.filter((h) => h.id !== id);
     setHistory(updated);
@@ -99,9 +99,9 @@ export default function ChatPage() {
     }
   };
 
-  /* -------------------- 发送问题 -------------------- */
+  /* -------------------- Sending problem -------------------- */
   const send = async (text: string) => {
-    if (isSending || isTyping) return; // 正在请求或打字中时禁止重复发送
+    if (isSending || isTyping) return; // Do not send duplicates while requesting or typing.
 
     const userMsg: Message = { id: uuidv4(), role: "user", text };
     const loadingMsg: Message = {
@@ -111,18 +111,18 @@ export default function ChatPage() {
       loading: true,
     };
 
-    // 一次性把“用户消息 + loading 占位”塞进去
+    // Integrate "user message + loading placeholder" all at once
     setMessages((prev) => [...prev, userMsg, loadingMsg]);
     setIsSending(true);
 
     try {
-      // ✅ 现在 askQuestion 返回的是 { answer, context }
+      // ✅ Now, askQuestion returns {answer, context}.
       const res = await askQuestion(text);
 
       const aiAnswer = res.answer ?? "";
       const rawContext = Array.isArray(res.context) ? res.context : [];
 
-      // ✅ 映射成统一的 ReferenceCase 结构，方便 UI 使用
+      // ✅ Mapped to a unified ReferenceCase structure for easier UI use.
       const referenceCases = rawContext.map((c: any, index: number) => ({
         id: index + 1,
         question: c.ask ?? "",
@@ -132,7 +132,7 @@ export default function ChatPage() {
 
       const finalId = uuidv4();
 
-      // 替换 loading 那条消息
+      // Replace the loading message
       setMessages((prev) =>
         prev.map((m) =>
           m.id === loadingMsg.id
@@ -148,7 +148,7 @@ export default function ChatPage() {
         )
       );
 
-      // 开始前端打字机动画
+      // Start the front-end typewriter animation
       setIsTyping(true);
     } catch (e) {
       console.error(e);
@@ -165,13 +165,13 @@ export default function ChatPage() {
       );
       setIsTyping(false);
     } finally {
-      // 后端请求结束（不管成功失败）
+      // The backend request has ended (regardless of success or failure).
       setIsSending(false);
     }
   };
 
 
-  /* -------------------- 找到需要打字机的最后一条回答 -------------------- */
+  /* -------------------- The last answer that asked for a typewriter was found. -------------------- */
   const lastAssistant = [...messages]
     .filter((m) => m.role === "assistant" && !m.loading)
     .slice(-1)[0];
@@ -181,7 +181,7 @@ export default function ChatPage() {
 
   return (
     <div className="app-shell">
-      {/* 顶部 */}
+      {/* top */}
       <header className="header">
         <div className="header-inner">
           <h1>Medical RAG 医疗健康咨询助手</h1>
@@ -192,7 +192,7 @@ export default function ChatPage() {
       </header>
 
       <div className="main-container">
-        {/* 左侧历史栏 */}
+        {/* left-hand history bar */}
         <aside className="sidebar">
           <div className="sidebar-title">历史会话</div>
 
@@ -221,7 +221,7 @@ export default function ChatPage() {
           ))}
         </aside>
 
-        {/* 右侧聊天区 */}
+        {/* right-side chat area */}
         <div className="chat-container">
           <div className="message-list" id="scroll-container">
             <div className="message-center">
@@ -242,7 +242,7 @@ export default function ChatPage() {
               />
             </div>
 
-            {/* ⭐ 这里就是你要的“编辑中”状态提示，仅在等待后端时显示 */}
+            {/* ⭐ This is the "Editing" status message you're looking for, which only appears while waiting for the backend.*/}
             {isSending && (
               <div className="input-status">
                 编辑中…（模型正在生成回答，请稍候）

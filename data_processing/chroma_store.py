@@ -5,7 +5,7 @@ import chromadb
 from chromadb.utils import embedding_functions
 from pathlib import Path
 from tqdm import tqdm
-import json  # 用于格式化输出JSON
+import json  # Used for formatting JSON output
 from zai import ZhipuAiClient
 from typing import List
 

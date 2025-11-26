@@ -2,7 +2,7 @@
 import axios from "axios";
 
 /**
- * 后端返回的 context 每一项结构
+ * The context returned by the backend, each item in the structure
  */
 export interface BackendContextItem {
   ask: string;
@@ -11,10 +11,10 @@ export interface BackendContextItem {
 }
 
 /**
- * 后端原始返回结构（你刚刚发给我的那种）
+ * The original return structure from the backend (the one you just sent me)
  *
  * {
- *   "answer": "……总结回答……",
+ *   "answer": "……Summary of answers……",
  *   "context": [
  *     { "ask": "...", "answer": "...", "department": "..." },
  *     ...
@@ -27,9 +27,9 @@ export interface BackendResponse {
 }
 
 /**
- * 给前端用的 askQuestion：
- * 直接把后端的 answer / context 原样返回，
- * ChatPage 里已经用 res.answer / res.context 取字段了。
+* For the front-end use of askQuestion:
+* Return the back-end's answer/context as is.
+* The ChatPage already uses res.answer / res.context to retrieve the fields.
  */
 export async function askQuestion(
   question: string
