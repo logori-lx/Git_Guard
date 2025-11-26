@@ -11,7 +11,10 @@ python data_preprocessing.py
 # One-key deployment
 As docker compose has been used, you can run both frontend and backend with the command below
 ```
-# in project root directory
+# in project root directory 
+# ATTENTION: You need to ensure the backend image has been built
+# by executing the cmd: cd backend && docker build . -t backend
+# before executing the command below to start both frontend and backend service
 docker-compose up -d
 ```
 stop both the frontend and backend with the command below
