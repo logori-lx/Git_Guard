@@ -17,7 +17,7 @@ def _load_zhipu_api_key() -> str:
         if _ZHIPU_KEY_FILE.exists():
             return _ZHIPU_KEY_FILE.read_text(encoding="utf-8").strip()
     except Exception:
-        # 忽略文件读取错误，改为从环境变量获取
+        # Ignore file read errors and retrieve the file from environment variables instead.
         pass
     return os.environ.get("ZHIPU_API_KEY", "")
 
@@ -29,13 +29,13 @@ INPUT_PATH = "data_processing/processed_data"
 
 
 class ZhipuEmbeddingFunction:
-    """智谱Embedding3嵌入函数"""
+    """ZhipuEmbedding3 embedding function"""
 
-    """（添加name属性）"""
+    """(Add name attribute)"""
 
     def name(self):
-        """返回嵌入模型名称（Chroma要求的方法）"""
-        return "zhipu-embedding-3"  # 关键修复：将name改为方法
+        """Returns the name of the embedded model (the method required by Chroma)."""
+        return "zhipu-embedding-3"  # Critical fix: Change name to method
 
     def __call__(self, input: List[str]) -> List[List[float]]:
         self.zhipu_api_key = ZHIPU_API_KEY
@@ -43,7 +43,7 @@ class ZhipuEmbeddingFunction:
             raise ValueError("ZHIPU_API_KEY environment variable not set.")
         client = ZhipuAiClient(api_key=self.zhipu_api_key)
         response = client.embeddings.create(
-            model="embedding-3",  # 填写需要调用的模型编码
+            model="embedding-3",  # Enter the model code to be called.
             input=input,
         )
         return [data_point.embedding for data_point in response.data]
@@ -65,18 +65,18 @@ class ChromaStore:
         )
 
     def load_data(self, file_path):
-        """从CSV文件加载数据"""
+        """Load data from a CSV file"""
         df = pd.read_csv(file_path)
-        print(f"{file_path} 原始数据行数：{len(df)}")
+        print(f"{file_path} Original number of rows: {len(df)}")
     
-        # 只删除关键列（title/department/answer）为空的行，其他列空值保留
+        # Delete only rows where the key columns (title/department/answer) are empty; retain empty values in other columns.
         df = df.dropna(subset=["title", "department", "answer"])
         
-        print(f"{file_path}过滤后数据行数：{len(df)}")
+        print(f"Number of rows after filtering by {file_path}: {len(df)}")
         return df
 
     def store_data(self, batch_size=64):
-        """分批存储数据到Chroma"""
+        """Store data to Chroma in batches"""
         count = 0
         list_dir = os.listdir(self.input_path)
         for file_name in list_dir:
@@ -85,7 +85,7 @@ class ChromaStore:
                 file_path = os.path.join(self.input_path, file_name)
                 df = self.load_data(file_path)
                 count += 1
-                print(f"文件{file_name}__/{len(list_dir)}加载完成，共{len(df)}条数据")
+                print(f"file {file_name}__/{len(list_dir)} loading successfully，total {len(df)} data")
 
                 total_rows = len(df)
                 file_name_prefix, _ = os.path.splitext(file_name)
@@ -116,7 +116,7 @@ class ChromaStore:
 
 if __name__ == "__main__":
 
-    # 初始化→存入Chroma
+    # Initialize → Store in Chroma
     store = ChromaStore(
         collection_name=COLLECTION_NAME,
         storage_path=CHROMA_STORAGE_PATH,

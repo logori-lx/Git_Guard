@@ -3,20 +3,21 @@ import re
 
 COMMON_DISEASE_NAME_LENGTH = 6
 def filter_diseases_by_suffix(excel_path):
-    print("正在读取Excel文件...")
+    print("Reading Excel file...")
     try:
-        # 读取Excel（默认读取第一个工作表，疾病名称默认在第一列）
-        df_raw = pd.read_excel(excel_path, header=None)  # 无表头，避免列名干扰
-        disease_col = df_raw.iloc[:, 2]  # 取第一列作为疾病名称列
-        print(f"成功读取 {len(disease_col)} 条原始数据")
+        # Read Excel (by default, it reads the first worksheet; disease names are in the first column by default).
+        df_raw = pd.read_excel(excel_path, header=None)  # No table header to avoid column name interference.
+        disease_col = df_raw.iloc[:, 2]  # Take the first column as the disease name column.
+        print(f"Successfully read {len(disease_col)} raw data entries.")
     except Exception as e:
-        print(f"读取Excel失败：{str(e)}")
+        print(f"Failed to read Excel: {str(e)}")
         return
 
     # --------------------------
-    # 2. 定义疾病后缀正则表达式
+    # 2. Define the regular expression for disease suffixes
     # --------------------------
-    # 核心：覆盖常见疾病后缀（炎/病/综合征等）+ 特殊疾病类型，避免漏筛
+    # Core: Cover common disease suffixes (inflammatory/disease/syndrome, etc.) + special disease types to avoid missed detections
+
     DISEASE_SUFFIX_REGEX = r"""
     ^[a-zA-Z0-9\u4e00-\u9fa5\s\(\)\-\/]+?  # 前缀：允许字母/数字/中文/空格/括号/连接符
     (?:
@@ -33,30 +34,30 @@ def filter_diseases_by_suffix(excel_path):
     )
     [\s\(\)\-\/]*$  # 后缀：允许结尾的空格/括号/连接符（如"糖尿病 (2型)"）
     """
-    # 编译正则：忽略空格换行、大小写不敏感、支持中文
+    # Compilation regular expressions: Ignore spaces and newlines, case-insensitive, support Chinese characters.
     disease_pattern = re.compile(DISEASE_SUFFIX_REGEX, re.VERBOSE | re.UNICODE | re.IGNORECASE)
 
     # --------------------------
-    # 3. 筛选有效疾病名称
+    # 3. Filter valid disease names
     # --------------------------
-    print("正在筛选有效疾病名称...")
+    print("Filtering valid disease names...")
     long_name_diseases = []
     short_name_diseases = []
     invalid_records = []
 
-    # 第一次遍历，筛选出符合后缀规则的疾病名称
+    # The first iteration filters out disease names that match the suffix rules.
     for idx, raw_name in enumerate(disease_col):
-        # 预处理：转为字符串、去前后空格、去特殊标点（避免格式干扰）
-        if pd.isna(raw_name):  # 跳过空值
+        # Preprocessing: Convert to string, remove leading and trailing spaces, remove special punctuation (to avoid formatting interference).
+        if pd.isna(raw_name):  # Skip null values
             invalid_records.append({"序号": idx + 1, "原始内容": "空值", "原因": "空数据"})
             continue
         
-        # 转为字符串并预处理
+        # Convert to string and preprocess
         clean_name = str(raw_name).strip()
-        # 去除无意义的特殊字符（如全角空格、制表符）
+        # Remove meaningless special characters (such as full-width spaces and tabs).
         clean_name = re.sub(r"[\t\u3000]", "", clean_name)
         
-        if len(clean_name) < 2:  # 跳过过短文本（如单个字、空字符串）
+        if len(clean_name) < 2:  # Skip short text (such as single words or empty strings).
             invalid_records.append({"序号": idx + 1, "原始内容": raw_name, "原因": "文本过短（<2字符）"})
             continue
             
@@ -69,26 +70,27 @@ def filter_diseases_by_suffix(excel_path):
             invalid_records.append({"序号": idx + 1, "原始内容": raw_name, "原因": "未匹配疾病后缀规则"})
 
     # --------------------------
-    # 4. 去重处理
+    # 4. Deduplication
     # --------------------------
-    print("正在进行去重处理...")
+    print("Deduplication is in progress...")
     
-    # 短名称去重（使用set自动去重）
+    # Short name deduplication (use set for automatic deduplication)
     unique_short_names = list(set(short_name_diseases))
-    # 排序（按长度降序，长度相同按字母顺序）
+    # Sort (in descending order by length, and alphabetically if the lengths are the same).
     unique_short_names.sort(key=lambda x: (-len(x), x))
-    print(f"筛选出 {len(unique_short_names)} 条唯一短名称疾病")
-    
-    # 长名称前缀去重
-    # 首先对长名称按长度排序（从短到长），这样可以优先保留较短的前缀
+    print(f"Filter out {len(unique_short_names)} unique short names of diseases")
+
+    # Deduplication of Long Name Prefixes
+    # First, sort long names by length (from shortest to longest). This allows you to prioritize retaining shorter prefixes.
+
     long_name_diseases.sort(key=lambda x: len(x))
     
     unique_long_names = []
-    # 用于存储已经处理过的前缀（包括短名称和已保留的长名称）
+    # Used to store processed prefixes (including short names and long names that have been retained).
     processed_prefixes = set(unique_short_names)
     
     for long_name in long_name_diseases:
-        # 检查当前长名称是否以任何已处理的前缀开头
+        # Check if the current long name begins with any processed prefix.
         is_duplicate = False
         for prefix in processed_prefixes:
             if long_name.startswith(prefix):
@@ -98,7 +100,7 @@ def filter_diseases_by_suffix(excel_path):
         if not is_duplicate:
             unique_long_names.append(long_name)
             processed_prefixes.add(long_name[COMMON_DISEASE_NAME_LENGTH])
-    print(f"筛选出 {len(unique_long_names)} 条唯一长名称疾病")
+    print(f"Filter out {len(unique_long_names)} unique long names of diseases")
     return unique_long_names + unique_short_names
             
         
@@ -132,30 +134,30 @@ def add_custom_diseases(csv_path, custom_diseases_csv_path):
         
                  
     
-#目的：生成jieba疾病词典，可以实现使用jieba库匹配识别出语句中的疾病
+#Objective: To generate a jieba disease dictionary, enabling the use of the jieba library to match and identify diseases in sentences.
 if __name__ == "__main__":
-    # 河北卫健委的数据中含有大量在普通人眼中不是疾病的疾病，故而需要对其中的数据进行筛选
-    # xlsx来源：河北卫健委
+    # The data from the Hebei Provincial Health Commission contains a large number of diseases that are not considered diseases by the average person, therefore, the data needs to be filtered.
+    # Source: Hebei Provincial Health Commission (xlsx file)
     INPUT_EXCEL = "disease_names.xlsx"
-    # 输出路径：筛选后疾病的CSV（可自定义名称）
+    # Output path: CSV file of filtered diseases (customizable name)
     OUTPUT_CSV = "./disease_names_processed.csv"
 
-    # 执行筛选
+    # Perform filtering
     res = filter_diseases_by_suffix(INPUT_EXCEL)
     df_final = pd.DataFrame({
         "disease_name": res,
         "name_length": [len(name) for name in res],
     })
     
-    # 按长度降序排序，长度相同按字母顺序
+    # Sort by length in descending order; sort by alphabetical order if lengths are the same.
     df_final = df_final.sort_values(by=["name_length", "disease_name"], ascending=[False, True]).reset_index(drop=True)
     
-    # 保存为CSV
+    # Save as CSV
     df_final.to_csv(OUTPUT_CSV, index=False, encoding="utf-8-sig")
-    print(f"筛选结果已保存到 {OUTPUT_CSV}，共 {len(df_final)} 条有效疾病名称。")
-    
-    # 筛选后的数据没有很多常见病的名称
-    # 故与genai生成的常见病列表(supplementary_common_diseases.csv)合并，作为补充
+    print(f"The filtering results have been saved to {OUTPUT_CSV}, containing a total of {len(df_final)} valid disease names.")
+
+    # The filtered data does not contain many common disease names
+    # Therefore, it is merged with the common disease list (supplementary_common_diseases.csv) generated by genai as a supplement.
     add_custom_diseases(OUTPUT_CSV, 'supplementary_common_diseases.csv')
     
     

@@ -7,22 +7,22 @@ MAX_RELATED_DISEASES_COUNT = 2
 class DataPreprocessor:
     def __init__(self, disease_dict_csv):
         """
-        初始化数据预处理器，加载疾病名称构建Jieba自定义词典。
+        Initialize the data preprocessor and load disease names to build a Jieba custom dictionary.
 
-        :param disease_dict_csv: 含疾病名称的CSV路径（如你的disease_names_processed.csv）
+        :param disease_dict_csv: The path to the CSV file containing disease names (e.g., your disease_names_processed.csv)
         """
         self.extractor = DiseaseExtractor(disease_dict_csv)
     
     def process_medical_data(self, input_csv, output_csv):
-        # 读取输入CSV文件
+        # Read input CSV file
         df = pd.read_csv(input_csv, encoding="utf-8-sig")
         
-        # 存储有效行的Top N疾病和原始行数据
+        # Store the Top N diseases of valid rows and the original row data.
         valid_rows = []
         top_diseases_per_row = []
         
         for _, row in df.iterrows():
-            # 合并三列文本内容
+            # Merge three columns of text content
             text_parts = [
                 str(row['department']),
                 str(row['title']),
@@ -30,45 +30,45 @@ class DataPreprocessor:
             ]
             combined_text = ' '.join(text_parts)
             
-            # 提取疾病名称
+            # Extract disease name
             diseases = self.extractor.extract_diseases_from_text(combined_text)
             
-            # 只处理识别到疾病的数据
+            # Only process data that identifies diseases
             if not diseases:
-                continue  # 无疾病则跳过当前行
-            
-            # 计算当前行的Top N疾病
-            # 统计频率
+                continue  # Skip the current line if there is no disease.
+
+            # Calculate the Top N diseases in the current row
+            # Statistical frequency
             freq = {}
             for disease in diseases:
                 freq[disease] = freq.get(disease, 0) + 1
-            # 按频率排序（降序），频率相同则按出现顺序
+            # Sort by frequency (descending order), and if frequencies are the same, sort by order of appearance.
             sorted_diseases = sorted(freq.items(), key=lambda x: (-x[1], diseases.index(x[0])))
             sorted_names = [item[0] for item in sorted_diseases]
-            # 取前N个，不足则用空字符串填充
+            # Take the first N strings; if there are not enough, fill them with empty strings.
             row_top = sorted_names[:MAX_RELATED_DISEASES_COUNT]
             if len(row_top) < MAX_RELATED_DISEASES_COUNT:
                 row_top += ["无"] * (MAX_RELATED_DISEASES_COUNT - len(row_top))
             
-            # 保存有效行数据和对应的疾病
+            # Save valid row data and corresponding diseases
             valid_rows.append(row)
             top_diseases_per_row.append(row_top)
         
-        # 基于有效行创建新的DataFrame
+        # Create a new DataFrame based on valid rows.
         result_df = pd.DataFrame(valid_rows)
         
-        # 添加Top N疾病列
+        # Add Top N disease columns
         for i in range(MAX_RELATED_DISEASES_COUNT):
             col_name = f'related_disease_{i+1}'
             result_df[col_name] = [row_top[i] for row_top in top_diseases_per_row]
         
         # 保存结果到新CSV
         result_df.to_csv(output_csv, encoding="utf-8-sig", index=False)
-        print(f"处理完成，共保留 {len(result_df)} 条有效数据，结果已保存至 {output_csv}")
+        print(f"Processing complete. A total of {len(result_df)} valid data entries were retained. The results have been saved to {output_csv}")
     
     def preprocess_dir(self, process_dir_path, output_dir_path):
         import os
-        # 确保输出目录存在
+        # Ensure the output directory exists.
         os.makedirs(output_dir_path, exist_ok=True)
         list_dir = os.listdir(process_dir_path) 
         for file_name in list_dir:
