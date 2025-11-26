@@ -8,6 +8,17 @@ cd data_processing
 python disease_name_preprocess.py
 python data_preprocessing.py
 ```
+# One-key deployment
+As docker compose has been used, you can run both frontend and backend with the command below
+```
+# in project root directory
+docker-compose up -d
+```
+stop both the frontend and backend with the command below
+```
+docker-compose down
+```
+
 # Backend Usage
 ## Method1
 Before running server you need to set the api_key of 智谱清言 in evironmental variable

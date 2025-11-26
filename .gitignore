@@ -4,6 +4,7 @@ backend/data_processing/DATA/
 *.ipynb
 data_processing/original_data/*.csv
 data_processing/processed_data/*.csv
+data_processing/filtered
 data_processing/DATA
 data_processing/API_KEY.txt
 frontend/node_modules

@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  # 后端服务
+  backend:
+    image: backend:latest  # 您的后端镜像名
+    container_name: backend
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      - MEDICAL_RAG=9dd0e61fde9c4ca0b572364dab60050a.08fYd77kKLzXUb8N
+    volumes:
+      - /root/DATA/chroma_db:/app/DATA/chroma_db
+
+  # 前端服务
+  frontend:
+    build: ./frontend      # 指向包含 Dockerfile 的前端目录
+    container_name: frontend
+    restart: always
+    ports:
+      - "5173:80"            # 对外暴露80端口，直接通过IP访问
+    depends_on:
+      - backend            # 确保后端先启动
