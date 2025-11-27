@@ -1,48 +1,176 @@
+# File: server/analyzer_template.py
 import os
 import sys
 import re
 import requests
+import chromadb
+from typing import List, Dict, Any
 from git import Repo
 from zhipuai import ZhipuAI
 
 # ==========================================
-# 环境配置 & 路径 Hack
+# 1. 基础环境与配置
 # ==========================================
-# [关键] 将当前脚本所在目录(.git/hooks)加入 sys.path，以便能 import 同目录下的 retrieval 和 rerank
-current_dir = os.path.dirname(os.path.abspath(__file__))
-if current_dir not in sys.path:
-    sys.path.append(current_dir)
 
-# 尝试导入同级模块 (这些文件需由安装器一同下载)
-try:
-    from retrieval import Retrieval
-    from rerank import Reranker
-except ImportError:
-    # 如果没下载全，定义空类防报错
-    Retrieval = None
-    Reranker = None
-
-# Windows 编码修复
+# [FIX] Windows GBK 编码修复
 if sys.platform == 'win32':
     try:
         sys.stdout.reconfigure(encoding='utf-8')
         sys.stderr.reconfigure(encoding='utf-8')
-    except: pass
+    except AttributeError:
+        pass
 
 SERVER_BASE_URL = "http://localhost:8000"
 CONFIG_URL = f"{SERVER_BASE_URL}/api/v1/config"
 TRACK_URL = f"{SERVER_BASE_URL}/api/v1/track"
+
+# 优先读取环境变量，如果没有则尝试从系统读取
 API_KEY = os.getenv("MEDICAL_RAG")
 
+# 自动定位项目根目录
 try:
     repo_obj = Repo(".", search_parent_directories=True)
     REPO_PATH = repo_obj.working_tree_dir
 except:
     REPO_PATH = "."
 
+# 数据库路径
+GUARD_DIR = os.path.join(REPO_PATH, ".git_guard")
+DB_PATH = os.path.join(GUARD_DIR, "chroma_db")
+
+# 文件后缀 -> 集合名称 映射
+EXT_TO_COLLECTION = {
+    ".py": "repo_python", ".java": "repo_java", ".js": "repo_js",
+    ".ts": "repo_js", ".html": "repo_html", ".go": "repo_go", 
+    ".cpp": "repo_cpp", ".c": "repo_cpp"
+}
+
 # ==========================================
-# 辅助函数
+# 2. 核心类定义 (从原 rerank.py 和 retrieval.py 合并而来)
 # ==========================================
+
+class Reranker:
+    """调用智谱 AI 进行语义重排序"""
+    def __init__(self):
+        self.url = "https://open.bigmodel.cn/api/paas/v4/rerank"
+        self.model = "rerank-3"
+        self.api_key = API_KEY
+
+    def rerank(self, query: str, documents: List[Dict], top_k: int = 3) -> List[Dict]:
+        """
+        :param documents: List of dicts, must contain 'answer' key
+        """
+        if not self.api_key or not documents:
+            return documents[:top_k]
+
+        # 提取纯文本用于 API 调用 (截断防止超长)
+        doc_texts = [doc.get("answer", "")[:2000] for doc in documents]
+
+        payload = {
+            "model": self.model,
+            "query": query[:1000], 
+            "documents": doc_texts,
+            "top_n": top_k
+        }
+        
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json"
+        }
+        
+        try:
+            response = requests.post(self.url, json=payload, headers=headers, timeout=5)
+            if response.status_code == 200:
+                results = response.json().get('results', [])
+                reranked_docs = []
+                for item in results:
+                    original_idx = item['index']
+                    doc = documents[original_idx]
+                    doc['score'] = item['relevance_score'] # 更新分数为 Rerank 分数
+                    reranked_docs.append(doc)
+                return reranked_docs
+            else:
+                return documents[:top_k]
+        except Exception:
+            return documents[:top_k]
+
+class ZhipuEmbeddingFunction(chromadb.EmbeddingFunction):
+    """智谱 Embedding 适配器"""
+    def __init__(self):
+        self.api_key = API_KEY
+        self.client = ZhipuAI(api_key=self.api_key)
+    
+    def __call__(self, input: List[str]) -> List[List[float]]:
+        if not self.api_key: return [[]] * len(input)
+        try:
+            response = self.client.embeddings.create(model="embedding-3", input=input)
+            return [data.embedding for data in response.data]
+        except:
+            return [[]] * len(input)
+
+class Retrieval:
+    """混合检索管理器 (Vector + Keyword)"""
+    def __init__(self):
+        if not os.path.exists(DB_PATH):
+            self.client = None
+            return
+
+        self.client = chromadb.PersistentClient(path=DB_PATH)
+        self.embedding_function = ZhipuEmbeddingFunction()
+        self.vector_distance_max = 2.0
+
+    def vector_retrieve(self, query: str, collection_name: str, top_k: int = 5) -> List[Dict]:
+        if not self.client: return []
+        try:
+            collection = self.client.get_collection(
+                name=collection_name, 
+                embedding_function=self.embedding_function
+            )
+            results = collection.query(query_texts=[query], n_results=top_k)
+            
+            hits = []
+            if results['ids'] and results['ids'][0]:
+                for i in range(len(results['ids'][0])):
+                    dist = results['distances'][0][i]
+                    score = 1 - min(dist / self.vector_distance_max, 1.0)
+                    hits.append({
+                        "id": results['ids'][0][i],
+                        "answer": results['documents'][0][i],
+                        "metadata": results['metadatas'][0][i],
+                        "score": score,
+                        "source": "vector"
+                    })
+            return hits
+        except Exception:
+            return []
+
+    def hybrid_retrieve(self, query: str, collection_name: str, top_k: int = 5) -> List[Dict]:
+        # 1. 向量召回 (扩大范围)
+        vector_hits = self.vector_retrieve(query, collection_name, top_k=top_k * 2)
+        
+        # 2. 关键词加权 (简单的字面匹配)
+        keywords = set(query.split())
+        for hit in vector_hits:
+            code_content = hit["answer"]
+            match_count = sum(1 for kw in keywords if kw in code_content)
+            # 混合打分: Vector(0.7) + Keyword(0.3)
+            keyword_score = min(match_count * 0.1, 1.0)
+            hit["score"] = (hit["score"] * 0.7) + (keyword_score * 0.3)
+            hit["source"] = "hybrid"
+
+        # 3. 排序截断
+        sorted_hits = sorted(vector_hits, key=lambda x: x["score"], reverse=True)[:top_k]
+        return sorted_hits
+
+    def retrieve_code(self, query_diff: str, file_ext: str, top_k: int = 5) -> List[Dict]:
+        if file_ext not in EXT_TO_COLLECTION: return []
+        col_name = EXT_TO_COLLECTION[file_ext]
+        return self.hybrid_retrieve(query_diff, col_name, top_k)
+
+# ==========================================
+# 3. 辅助功能函数
+# ==========================================
+
 def get_console_input(prompt_text):
     print(prompt_text, end='', flush=True)
     try:
@@ -73,13 +201,12 @@ def report_to_cloud(msg, risk, summary):
     except: pass
 
 # ==========================================
-# 核心逻辑：获取 Diff -> Hybrid Retrieve -> Rerank
+# 4. 业务逻辑：Hybrid Retrieve + Rerank + LLM
 # ==========================================
-def process_changes_with_rag():
-    if not API_KEY or Retrieval is None: 
-        return {}, ""
 
-    # 1. 获取 Diff
+def process_changes_with_rag():
+    if not API_KEY: return {}, ""
+
     try:
         repo = Repo(REPO_PATH)
         try:
@@ -92,7 +219,7 @@ def process_changes_with_rag():
     changes = {}
     context_str = ""
     
-    # 初始化 RAG 组件
+    # 实例化刚才定义的类
     retriever = Retrieval()
     reranker = Reranker()
 
@@ -101,36 +228,30 @@ def process_changes_with_rag():
         fpath = diff.b_path if diff.b_path else diff.a_path
         if not fpath: continue
         
-        # 读取 Diff 文本
         try:
             text = repo.git.diff("--cached", fpath)
             if not text.strip(): text = "(New File)"
             _, ext = os.path.splitext(fpath)
             
-            # 记录 Change
             changes[fpath] = text
 
             # --- RAG 流程 ---
-            # Step 1: 混合检索 (召回 Top 10)
+            # 1. 混合检索
             candidates = retriever.retrieve_code(query_diff=text, file_ext=ext, top_k=10)
             
             if candidates:
-                # Step 2: 重排序 (精选 Top 3)
+                # 2. 重排序
                 final_docs = reranker.rerank(query=text, documents=candidates, top_k=3)
                 
-                # 拼接上下文
                 for doc in final_docs:
                     score = doc.get('score', 0)
                     content = doc.get('answer', '')[:500]
-                    context_str += f"\n[Reference from DB (Score: {score:.2f})]:\n{content}\n"
+                    context_str += f"\n[Ref Score: {score:.2f}]:\n{content}\n"
 
         except Exception: pass
 
     return changes, context_str
 
-# ==========================================
-# 主运行入口
-# ==========================================
 def run(msg_file_path):
     try:
         with open(msg_file_path, 'r', encoding='utf-8') as f:
@@ -141,12 +262,10 @@ def run(msg_file_path):
 
     print(f"🔄 [Git-Guard] Analyzing (Hybrid RAG + Rerank)...")
     
-    # 调用 RAG 流程
     changes, context = process_changes_with_rag()
     
     if not changes: return
 
-    # 获取配置
     config = fetch_dynamic_rules()
     fmt = config.get("template_format", "Standard")
     rules = config.get("custom_rules", "")
@@ -160,7 +279,7 @@ def run(msg_file_path):
     Code Changes: 
     {str(list(changes.values()))[:3000]}
     
-    Relevant Knowledge Base (Context):
+    Knowledge Context:
     {context[:1500]}
     
     >>> RULES <<<
@@ -197,7 +316,6 @@ def run(msg_file_path):
                 raw = line.split("OPTIONS:")[1].strip()
                 options = [p.strip() for p in raw.split('|||') if p.strip()]
 
-        # 清洗选项
         final_options = []
         for opt in options:
             opt = re.sub(r'^[\d\-\.\s]+', '', opt).replace("OPTIONS:", "").strip()
