@@ -7,52 +7,48 @@ import subprocess
 import asyncio
 from datetime import datetime
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, BackgroundTasks 
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import uvicorn
 from typing import Optional, Dict
-from git import Repo  # GitPython
+from git import Repo
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
-from fastapi import BackgroundTasks 
 
 # ==========================================
-# [配置] 文件路径
+# Config: File Paths
 # ==========================================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_FILE_PATH = os.path.join(BASE_DIR, "server_config.json")
 LOG_FILE_PATH = os.path.join(BASE_DIR, "commit_history.csv")
-# [新增] CI 状态存储文件
 CI_STATUS_PATH = os.path.join(BASE_DIR, "ci_status.json")
-# [新增] CI 运行的工作目录 (代码会被拉取到这里)
 CI_WORKSPACE_DIR = os.path.join(BASE_DIR, "ci_workspace")
 
 # ==========================================
-# [默认值] 配置模板
+# Config: Default Settings
 # ==========================================
 DEFAULT_CONFIG = {
     "template_format": "[<Module>][<Type>] <Description>",
     "custom_rules": "1. <Module>: [Backend], [Frontend]. 2. <Type>: [Feat], [Fix].",
-    # [新增] CI 配置
-    "github_repo_url": "",  # 例如: https://github.com/username/repo.git
-    "ci_interval_minutes": 60 # 默认每小时跑一次
+    "github_repo_url": "", 
+    "ci_interval_minutes": 60
 }
 
 # ==========================================
-# [全局变量] 调度器
+# Global: Scheduler
 # ==========================================
 scheduler = AsyncIOScheduler()
 
 # ==========================================
-# [辅助函数] 持久化存储
+# Helper Functions: Persistence
 # ==========================================
 def load_config_from_disk() -> dict:
     if not os.path.exists(CONFIG_FILE_PATH): return DEFAULT_CONFIG
     try:
         with open(CONFIG_FILE_PATH, 'r', encoding='utf-8') as f:
             config = json.load(f)
-            # 确保新字段存在 (兼容旧配置文件)
+            # Ensure new keys exist for backward compatibility
             for k, v in DEFAULT_CONFIG.items():
                 if k not in config: config[k] = v
             return config
@@ -62,7 +58,7 @@ def save_config_to_disk(config_data: dict):
     try:
         with open(CONFIG_FILE_PATH, 'w', encoding='utf-8') as f:
             json.dump(config_data, f, ensure_ascii=False, indent=4)
-        # 配置更新后，重启定时任务
+        # Reschedule CI job if config updated
         reschedule_ci_job(config_data.get("ci_interval_minutes", 60))
     except Exception as e:
         print(f"❌ Failed to save config: {e}")
@@ -78,7 +74,7 @@ def save_log_to_csv(log):
             writer.writerow([timestamp, log.developer_id, log.repo_name, log.risk_level, log.commit_msg, log.ai_summary])
     except: pass
 
-# [新增] CI 状态管理函数
+# CI Status Management
 def load_ci_status():
     if not os.path.exists(CI_STATUS_PATH):
         return {"status": "Never Ran", "last_run": None, "details": "No logs yet."}
@@ -90,14 +86,14 @@ def load_ci_status():
 def save_ci_status(status, details):
     data = {
         "last_run": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "status": status,  # "Success" or "Failed"
-        "details": details # 详细的 pytest 输出
+        "status": status,
+        "details": details 
     }
     with open(CI_STATUS_PATH, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=4)
 
 # ==========================================
-# [核心逻辑] CI 任务：拉取代码 -> 跑测试
+# Core Logic: CI Task (Pull & Test)
 # ==========================================
 def run_ci_task():
     print("\n⏰ [CI Job] Starting scheduled CI task...")
@@ -110,7 +106,7 @@ def run_ci_task():
         return
 
     try:
-        # 1. 准备代码环境
+        # 1. Setup workspace
         if not os.path.exists(CI_WORKSPACE_DIR):
             os.makedirs(CI_WORKSPACE_DIR)
             print(f"   Cloning {repo_url}...")
@@ -122,24 +118,23 @@ def run_ci_task():
                 repo.git.checkout('main')
                 repo.remotes.origin.pull()
             except Exception as e:
-                # 如果 git 报错（比如文件夹损坏），暴力重来
+                # Force re-clone on git error
                 print(f"   Git pull failed ({e}), re-cloning...")
                 shutil.rmtree(CI_WORKSPACE_DIR)
                 os.makedirs(CI_WORKSPACE_DIR)
                 Repo.clone_from(repo_url, CI_WORKSPACE_DIR)
 
-        # 2. 运行 Pytest
+        # 2. Run Pytest
         print("   Running Pytest...")
-        # capture_output=True 捕获 stdout/stderr
         result = subprocess.run(
             ["pytest"], 
             cwd=CI_WORKSPACE_DIR, 
             capture_output=True, 
             text=True,
-            shell=True # Windows下有时需要
+            shell=True # Required for Windows
         )
 
-        # 3. 记录结果
+        # 3. Log results
         output_log = result.stdout + "\n" + result.stderr
         if result.returncode == 0:
             print("✅ [CI Job] Tests Passed!")
@@ -153,13 +148,12 @@ def run_ci_task():
         save_ci_status("System Error", str(e))
 
 def reschedule_ci_job(interval_minutes):
-    """更新定时任务频率"""
+    """Update job interval"""
     try:
         scheduler.remove_all_jobs()
-        # 添加新任务
         scheduler.add_job(
             run_ci_task, 
-            IntervalTrigger(minutes=max(1, interval_minutes)), # 至少1分钟
+            IntervalTrigger(minutes=max(1, interval_minutes)),
             id="ci_job",
             replace_existing=True
         )
@@ -168,11 +162,11 @@ def reschedule_ci_job(interval_minutes):
         print(f"⚠️ Scheduler Error: {e}")
 
 # ==========================================
-# [Lifespan] 生命周期管理 (启动/关闭调度器)
+# Lifespan: Scheduler Management
 # ==========================================
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 启动时：加载配置并启动调度器
+    # Startup
     config = load_config_from_disk()
     interval = config.get("ci_interval_minutes", 60)
     
@@ -182,12 +176,12 @@ async def lifespan(app: FastAPI):
     
     yield
     
-    # 关闭时
+    # Shutdown
     scheduler.shutdown()
     print("🛑 Scheduler Shutdown.")
 
 # ==========================================
-# [App] 初始化
+# App Initialization
 # ==========================================
 app = FastAPI(title="Git-Guard Cloud Server", lifespan=lifespan)
 
@@ -199,7 +193,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ... [CommitLog, ProjectConfig 模型保持不变] ...
 class CommitLog(BaseModel):
     developer_id: str
     repo_name: str
@@ -214,10 +207,9 @@ class ProjectConfig(BaseModel):
     ci_interval_minutes: Optional[int] = 60
 
 # ==========================================
-# [API] 接口定义
+# API Endpoints
 # ==========================================
 
-# ... [get_script, track_commit 接口保持不变] ...
 @app.get("/api/v1/scripts/{script_name}")
 def get_script(script_name: str):
     valid_scripts = {"analyzer": "analyzer_template.py", "indexer": "indexer_template.py"}
@@ -234,9 +226,8 @@ def track_commit(log: CommitLog):
 
 @app.post("/api/v1/config")
 def update_config(config: ProjectConfig):
-    """更新配置，包括 CI 设置"""
     new_config = config.dict()
-    save_config_to_disk(new_config) # 这里面会自动 reschedule_ci_job
+    save_config_to_disk(new_config) # Auto reschedules job
     print(f"⚙️  Config Updated: {new_config}")
     return {"status": "updated", "config": new_config}
 
@@ -244,22 +235,15 @@ def update_config(config: ProjectConfig):
 def get_config():
     return load_config_from_disk()
 
-# --- [新增] CI 状态查询接口 ---
 @app.get("/api/v1/ci/status")
 def get_ci_status():
-    """
-    前端轮询此接口，获取最近一次 CI 结果
-    """
     return load_ci_status()
 
-# --- [新增] 手动触发 CI ---
 @app.post("/api/v1/ci/run")
-def trigger_ci_manually(background_tasks: BackgroundTasks = None): # 需要 import BackgroundTasks
-    """允许前端手动点击按钮立即运行 CI"""
-    # 如果不传 background_tasks 也可以直接由 scheduler 触发一次
+def trigger_ci_manually(background_tasks: BackgroundTasks = None): 
     job = scheduler.get_job("ci_job")
     if job:
-        job.modify(next_run_time=datetime.now()) # 立即执行
+        job.modify(next_run_time=datetime.now()) # Execute immediately
         return {"status": "Triggered"}
     return {"status": "Error", "details": "Job not found"}
 

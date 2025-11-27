@@ -10,10 +10,10 @@ from zhipuai import ZhipuAI
 import getpass
 
 # ==========================================
-# 1. 基础环境与配置
+# Config & Environment
 # ==========================================
 
-# 尝试修复 Windows 输出编码，失败则忽略
+# Fix Windows console encoding issues
 if sys.platform == 'win32':
     try:
         sys.stdout.reconfigure(encoding='utf-8')
@@ -43,10 +43,11 @@ EXT_TO_COLLECTION = {
 }
 
 # ==========================================
-# 2. 核心类定义 (Reranker & Retrieval)
+# Core Classes: Rerank & Retrieval
 # ==========================================
 
 class Reranker:
+    """Zhipu AI Semantic Reranker"""
     def __init__(self):
         self.url = "https://open.bigmodel.cn/api/paas/v4/rerank"
         self.model = "rerank-3"
@@ -150,18 +151,18 @@ class Retrieval:
         return self.hybrid_retrieve(query_diff, col_name, top_k)
 
 # ==========================================
-# 3. 辅助功能函数
+# Helpers
 # ==========================================
 
 def get_abort_flag_path():
     return os.path.join(GUARD_DIR, "abort_commit.flag")
 
 def clean_markdown(text):
+    """Strip Markdown formatting for terminal output"""
     filtered_text = ""
-    for alphabet in text:
-        if alphabet == '*' or alphabet == '`' or alphabet == '#':
-            continue
-        filtered_text += alphabet
+    for char in text:
+        if char in ('*', '`', '#'): continue
+        filtered_text += char
     return filtered_text.strip()
 
 def get_console_input(prompt_text):
@@ -182,12 +183,9 @@ def fetch_dynamic_rules():
 
 def report_to_cloud(msg, risk, summary):
     try:
-        # 使用 getpass.getuser() 自动获取当前登录的系统用户名
-        # 它兼容 Windows 和 Linux
         try:
             user = getpass.getuser()
         except Exception:
-            # 兜底方案：如果 getpass 失败，尝试读取环境，最后设为 Unknown
             user = os.getenv("USERNAME") or os.getenv("USER") or "Unknown"
 
         payload = {
@@ -197,7 +195,6 @@ def report_to_cloud(msg, risk, summary):
             "risk_level": risk,
             "ai_summary": summary
         }
-        # 发送请求
         requests.post(TRACK_URL, json=payload, timeout=2)
     except Exception:
         pass
@@ -239,7 +236,7 @@ def process_changes_with_rag():
     return changes, context_str
 
 # ==========================================
-# 4. 业务模式：纯报告模式 (Pre-commit)
+# Mode 1: Pre-commit Report (Report Only)
 # ==========================================
 def run_report_mode():
     flag_path = get_abort_flag_path()
@@ -304,7 +301,7 @@ def run_report_mode():
         print("[Info] Proceeding to commit message generation...")
 
 # ==========================================
-# 5. 业务模式：交互建议模式 (Commit-Msg)
+# Mode 2: Commit-Msg (Interactive Suggestion)
 # ==========================================
 def run_suggestion_mode(msg_file_path):
     if os.path.exists(get_abort_flag_path()):
@@ -325,36 +322,22 @@ def run_suggestion_mode(msg_file_path):
     rules = config.get("custom_rules", "")
 
     prompt = f"""
-    Role: Strict Commit Message Compliance Officer.
-    
-    [INPUT DATA]
-    User Intent (Draft): "{original_msg}"
-    Code Changes (Diff): {str(list(changes.values()))[:3000]} 
+    Role: Commit Message Generator.
+    User Draft: "{original_msg}"
+    Code Changes: {str(list(changes.values()))[:3000]} 
     Context: {context[:1500]}
     
-    [MANDATORY CONFIGURATION]
-    You MUST strictly follow these formatting rules:
-    1. Target Template: "{fmt}"
-    2. Custom Instructions: "{rules}"
+    >>> RULES <<<
+    Template: "{fmt}"
+    Instructions: "{rules}"
+    >>> END RULES <<<
     
-    [TASK]
-    Generate 3 distinct commit messages based on the "User Intent" and "Code Changes".
-    
-    CRITICAL INSTRUCTIONS:
-    - Every option MUST strictly match the structure of "Target Template".
-    - If the Template is "[Scope] <Msg>", your output MUST look like "[Backend] fix bug".
-    - Do NOT simply copy the User Draft; rewrite it to fit the Template.
-    - Apply all "Custom Instructions" (e.g., lowercase, specific types).
-    
-    [STRICT OUTPUT FORMAT]
+    STRICT FORMAT:
     RISK: <Level>
     SUMMARY: <Summary>
     OPTIONS: <Msg1>|||<Msg2>|||<Msg3>
     
-    [CONSTRAINTS]
-    - Plain text only. NO Markdown.
-    - NO numbered lists (1. 2.).
-    - Use '|||' as the ONLY separator for OPTIONS.
+    Constraints: Plain text only. No Markdown. No numbered lists.
     """
 
     try:
@@ -389,6 +372,7 @@ def run_suggestion_mode(msg_file_path):
     except Exception: return
 
     print("\n" + "="*60)
+    print(f" COMMIT SUGGESTIONS (Risk: {risk})")
     print("-" * 60)
     print(f"[0] [Keep Original]: {original_msg}")
     print(f"[1] {options[0]}")
@@ -410,9 +394,6 @@ def run_suggestion_mode(msg_file_path):
 
     report_to_cloud(final_msg, risk, summary)
 
-# ==========================================
-# 6. 入口路由
-# ==========================================
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         run_suggestion_mode(sys.argv[1])
