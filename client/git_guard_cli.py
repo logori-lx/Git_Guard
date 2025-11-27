@@ -31,18 +31,18 @@ HOOK_PRE_PUSH = """#!/bin/sh
 PYTHON_EXEC="python"
 GIT_DIR=$(git rev-parse --git-dir)
 SCRIPT="$GIT_DIR/hooks/git_guard_indexer.py"
+LOG_FILE="$GIT_DIR/../indexer_debug.log" # 将日志输出到项目根目录
 
 echo "------------------------------------------------"
 echo "🚀 Git-Guard: Triggering Knowledge Base Update..."
 
-# [重点] 使用 > /dev/null 2>&1 & 将其放入后台运行
-# 这样用户不需要等待索引建完，代码就能推上去
-"$PYTHON_EXEC" "$SCRIPT" > /dev/null 2>&1 &
+# [调试模式] 输出重定向到 log 文件，而不是 /dev/null
+"$PYTHON_EXEC" "$SCRIPT" > "$LOG_FILE" 2>&1 &
 
 echo "✅ Background indexing started."
+echo "   (Check indexer_debug.log for details)"
 echo "------------------------------------------------"
 
-# 必须返回 0，否则 Push 会被拦截
 exit 0
 """
 

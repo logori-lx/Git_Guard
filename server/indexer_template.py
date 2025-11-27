@@ -17,6 +17,10 @@ try:
     REPO_PATH = repo_obj.working_tree_dir
 except:
     REPO_PATH = "." # Fallback
+    
+GUARD_DIR = os.path.join(REPO_PATH, ".git_guard")
+if not os.path.exists(GUARD_DIR):
+    os.makedirs(GUARD_DIR) # 创建 .git_guard 文件夹
 
 # 数据库存放在项目根目录下的 .git_guard 文件夹内（隐藏且随项目存在）
 # 这样每个项目都有自己独立的 RAG 库
