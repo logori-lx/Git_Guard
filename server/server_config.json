@@ -1,4 +1,6 @@
 {
     "template_format": "[<Domain>][<Type>] <Summary>",
-    "custom_rules": "1. <Domain> must be: Backend, Frontend, Infra.\n2. <Type> must be: Feat, Fix, Refactor.\n3. Example: [Backend][Fix] fix login bug."
+    "custom_rules": "1. <Domain> must be: Backend, Frontend, Infra.\n2. <Type> must be: Feat, Fix, Refactor.\n3. Example: [Backend][Fix] fix login bug.",
+    "github_repo_url": "https://github.com/logori-lx/medical_RAG.git",
+    "ci_interval_minutes": 60
 }
