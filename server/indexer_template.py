@@ -47,11 +47,11 @@ class ZhipuEmbeddingFunction(chromadb.EmbeddingFunction):
 def build_index():
     if not API_KEY:
         # 如果是后台静默运行，打印日志即可
-        print("❌ API Key missing. Skipping indexing.")
+        print("API Key missing. Skipping indexing.")
         return
 
-    print(f"🚀 [Indexer] Scanning: {REPO_PATH}")
-    print(f"📂 [Indexer] Database: {DB_PATH}")
+    print(f"[Indexer] Scanning: {REPO_PATH}")
+    print(f"[Indexer] Database: {DB_PATH}")
 
     # 注意：在本地更新时，通常我们做增量更新比较复杂。
     # 为了 MVP 稳定性，这里依然采用"全量覆盖"策略。
@@ -93,7 +93,7 @@ def build_index():
         if batch_ids:
             col.add(ids=batch_ids, documents=batch_texts, metadatas=batch_metas)
 
-    print("✅ [Indexer] Local Knowledge Base Updated.")
+    print("[Indexer] Local Knowledge Base Updated.")
 
 if __name__ == "__main__":
     build_index()

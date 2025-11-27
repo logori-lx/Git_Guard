@@ -45,7 +45,7 @@ def get_script(script_name: str):
 @app.post("/api/v1/track")
 def track_commit(log: CommitLog):
     """只负责接收日志，不再触发后台任务"""
-    print(f"📡 [TRACKING] {log.repo_name} | {log.developer_id}: {log.commit_msg}")
+    print(f"[TRACKING] {log.repo_name} | {log.developer_id}: {log.commit_msg}")
     return {"status": "recorded"}
 
 if __name__ == "__main__":

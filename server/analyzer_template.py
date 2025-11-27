@@ -122,7 +122,7 @@ def run(msg_file_path):
     
     if not original_msg: return
 
-    print(f"🔄 [Git-Guard] Analyzing changes...")
+    print(f"[Git-Guard] Analyzing changes...")
     changes, context = get_diff_and_context()
     
     if not changes: 
@@ -197,12 +197,12 @@ def run(msg_file_path):
         options = final_options[:3]
 
     except Exception as e:
-        print(f"⚠️ AI Analysis failed: {e}")
+        print(f"AI Analysis failed: {e}")
         return
 
     # 3. 交互式选择 (数字风格)
     print("\n" + "="*60)
-    print(f"🤖 AI SUGGESTIONS (Risk: {risk_level})")
+    print(f"AI SUGGESTIONS (Risk: {risk_level})")
     print("="*60)
     print(f"[0] [Keep Original]: {original_msg}")
     print(f"[1] {options[0]}")
@@ -210,7 +210,7 @@ def run(msg_file_path):
     print(f"[3] {options[2]}")
     print("="*60)
 
-    selection = get_console_input("\n👉 Select (0-3) [Enter for 0]: ")
+    selection = get_console_input("\nSelect (0-3) [Enter for 0]: ")
 
     final_msg = original_msg
     if selection == '1': final_msg = options[0]
@@ -220,7 +220,7 @@ def run(msg_file_path):
     if final_msg != original_msg:
         with open(msg_file_path, 'w', encoding='utf-8') as f:
             f.write(final_msg)
-        print(f"✅ Message updated.")
+        print(f"Message updated.")
 
     report_to_cloud(final_msg, risk_level, summary)
 
