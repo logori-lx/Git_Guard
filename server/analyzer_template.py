@@ -1,31 +1,35 @@
 # File: server/analyzer_template.py
 import os
 import sys
-import requests # 用于向云端汇报
+import re  # [新增] 用于清洗 AI 输出
+import requests 
 import chromadb
-from typing import List, Dict
+from typing import List
 from git import Repo
 from zhipuai import ZhipuAI
 
+# [FIX] Windows GBK 编码修复
+if sys.platform == 'win32':
+    sys.stdout.reconfigure(encoding='utf-8')
+    sys.stderr.reconfigure(encoding='utf-8')
+
 # --- 配置 ---
-# 云端服务器地址 (汇报用)
 CLOUD_SERVER_URL = "http://localhost:8000/api/v1/track"
 
-# 自动定位项目根目录
 try:
     repo_obj = Repo(".", search_parent_directories=True)
     REPO_PATH = repo_obj.working_tree_dir
 except:
     REPO_PATH = "."
-repo_path = os.path.abspath(REPO_PATH)
-print(f"Processing {repo_path}")
 
-# 数据库路径 (假设在项目根目录的 git_guard/chroma_db)
-# 实际项目中，安装脚本应该帮忙设置好这个路径
-DB_PATH = os.path.join(REPO_PATH, ".git_guard", "chroma_db")
+# [关键修复] 确保父目录存在
+GUARD_DIR = os.path.join(REPO_PATH, ".git_guard")
+if not os.path.exists(GUARD_DIR):
+    os.makedirs(GUARD_DIR)
+
+DB_PATH = os.path.join(GUARD_DIR, "chroma_db")
 API_KEY = os.getenv("MEDICAL_RAG") 
 
-# 语言映射
 EXT_TO_COLLECTION = {
     ".py": "repo_python", ".java": "repo_java", ".js": "repo_js",
     ".ts": "repo_js", ".html": "repo_html", ".go": "repo_go", ".cpp": "repo_cpp"
@@ -42,7 +46,6 @@ class ZhipuEmbeddingFunction(chromadb.EmbeddingFunction):
         return [data.embedding for data in response.data]
 
 def get_console_input(prompt_text):
-    """Windows/Unix 兼容的强制终端输入"""
     print(prompt_text, end='', flush=True)
     try:
         if sys.platform == 'win32':
@@ -53,11 +56,9 @@ def get_console_input(prompt_text):
         return input().strip()
 
 def get_diff_and_context():
-    """获取 Diff 和 RAG 上下文"""
     if not API_KEY: return None, None
     try:
         repo = Repo(REPO_PATH)
-        # 兼容 Initial Commit
         try:
             diff_index = repo.head.commit.diff()
         except ValueError:
@@ -69,7 +70,6 @@ def get_diff_and_context():
     changes = {}
     for diff in diff_index:
         if diff.change_type == 'D': continue
-        # 核心 Fix: 优先取 b_path 解决 New File 问题
         fpath = diff.b_path if diff.b_path else diff.a_path
         if not fpath: continue
         
@@ -83,7 +83,6 @@ def get_diff_and_context():
                 changes[col] += f"\nFile: {fpath}\n{text}\n"
             except: pass
 
-    # RAG 检索
     context = ""
     if os.path.exists(DB_PATH) and changes:
         try:
@@ -97,14 +96,12 @@ def get_diff_and_context():
                         for doc in res['documents'][0]:
                             context += f"\nContext ({col_name}):\n{doc[:300]}...\n"
                 except: pass
-        except Exception as e:
-            # 数据库连接失败不应该阻塞流程
+        except Exception:
             pass
             
     return changes, context
 
 def report_to_cloud(msg, risk, summary):
-    """向云端服务器汇报"""
     try:
         user = os.getenv("USERNAME") or os.getenv("USER") or "Unknown Developer"
         payload = {
@@ -114,41 +111,41 @@ def report_to_cloud(msg, risk, summary):
             "risk_level": risk,
             "ai_summary": summary
         }
-        # 设置短超时，避免没网时卡住 Git
         requests.post(CLOUD_SERVER_URL, json=payload, timeout=2)
     except:
-        pass # 静默失败，不影响用户使用
+        pass
 
-# --- 主逻辑：Commit Suggestion & Analysis ---
+# --- 主逻辑 ---
 def run(msg_file_path):
-    # 1. 读取用户输入的原始消息
     with open(msg_file_path, 'r', encoding='utf-8') as f:
         original_msg = f.read().strip()
     
     if not original_msg: return
 
-    print(f"🔄 [Git-Guard] Analyzing changes for: '{original_msg}'...")
+    print(f"🔄 [Git-Guard] Analyzing changes...")
     changes, context = get_diff_and_context()
     
     if not changes: 
-        # 如果没有代码变更（比如只改了 README），直接放行
         return
 
-    # 2. 调用 AI 生成建议
+    # [优化] 强化 Prompt，强制单行输出，禁止编号
     prompt = f"""
     User Draft: "{original_msg}"
     Code Changes: {list(changes.values())}
     Context: {context[:1000]}
     
-    Task: 
-    1. Assess Risk (Low/Medium/High).
-    2. Generate 3 commit messages (Standard, Detailed, Emoji).
+    Task: Generate 3 commit messages.
     
-    Output Format:
+    STRICT FORMAT:
     RISK: <Level>
-    SUMMARY: <One sentence summary>
-    OPTIONS:
-    <Option 1>|||<Option 2>|||<Option 3>
+    SUMMARY: <Summary>
+    OPTIONS: <Msg1>|||<Msg2>|||<Msg3>
+    
+    RULES:
+    1. Do NOT use numbered lists (1., 2.).
+    2. Do NOT use newlines between options.
+    3. Use '|||' as the ONLY separator.
+    4. Provide strictly 3 options.
     """
     
     try:
@@ -159,32 +156,58 @@ def run(msg_file_path):
         content = res.choices[0].message.content
         
         # 解析 AI 返回
-        risk_level = "Unknown"
-        summary = "No summary"
+        risk_level = "Medium"
+        summary = "Code update"
         options = []
         
         for line in content.split('\n'):
-            if line.startswith("RISK:"): risk_level = line.replace("RISK:", "").strip()
-            if line.startswith("SUMMARY:"): summary = line.replace("SUMMARY:", "").strip()
-        
-        if "OPTIONS:" in content:
-            parts = content.split("OPTIONS:")[1].strip().split('|||')
-            options = [p.strip() for p in parts if p.strip()]
+            clean_line = line.strip()
+            if clean_line.startswith("RISK:"): 
+                risk_level = clean_line.replace("RISK:", "").strip()
+            if clean_line.startswith("SUMMARY:"): 
+                summary = clean_line.replace("SUMMARY:", "").strip()
             
-        while len(options) < 3: options.append("refactor: update code")
+            # [优化] 解析逻辑：处理 AI 可能的换行或格式错误
+            if "OPTIONS:" in clean_line:
+                raw_opts = clean_line.split("OPTIONS:")[1].strip()
+                # 如果 AI 没有换行，直接分割
+                if "|||" in raw_opts:
+                    parts = raw_opts.split('|||')
+                    options = [p.strip() for p in parts if p.strip()]
+        
+        # [补救] 如果上面没解析到，尝试全文搜索 |||
+        if not options and "|||" in content:
+             # 尝试提取最后一部分
+             parts = content.split('|||')
+             # 清洗数据：去掉 AI 可能加上的 "OPTIONS:" 前缀
+             options = [p.replace("OPTIONS:", "").strip() for p in parts if len(p.strip()) > 5]
+
+        # [兜底] 如果还是空的，或者 AI 真的输出了编号，进行正则清洗
+        final_options = []
+        for opt in options:
+            # 去掉开头的 "1. ", "2. ", "- " 等
+            clean_opt = re.sub(r'^[\d\-\.\s]+', '', opt)
+            if clean_opt:
+                final_options.append(clean_opt)
+        
+        # 补齐选项
+        while len(final_options) < 3: 
+            final_options.append("refactor: update code structure")
+            
+        options = final_options[:3]
 
     except Exception as e:
         print(f"⚠️ AI Analysis failed: {e}")
         return
 
-    # 3. 交互式选择
+    # 3. 交互式选择 (数字风格)
     print("\n" + "="*60)
     print(f"🤖 AI SUGGESTIONS (Risk: {risk_level})")
     print("="*60)
-    print(f"0️⃣  [Keep Original]: {original_msg}")
-    print(f"1️⃣  {options[0]}")
-    print(f"2️⃣  {options[1]}")
-    print(f"3️⃣  {options[2]}")
+    print(f"[0] [Keep Original]: {original_msg}")
+    print(f"[1] {options[0]}")
+    print(f"[2] {options[1]}")
+    print(f"[3] {options[2]}")
     print("="*60)
 
     selection = get_console_input("\n👉 Select (0-3) [Enter for 0]: ")
@@ -194,14 +217,11 @@ def run(msg_file_path):
     elif selection == '2': final_msg = options[1]
     elif selection == '3': final_msg = options[2]
     
-    # 4. 写入文件
     if final_msg != original_msg:
         with open(msg_file_path, 'w', encoding='utf-8') as f:
             f.write(final_msg)
         print(f"✅ Message updated.")
 
-    # 5. ☁️ 上报云端
-    print("📡 Reporting to Cloud Dashboard...")
     report_to_cloud(final_msg, risk_level, summary)
 
 if __name__ == "__main__":

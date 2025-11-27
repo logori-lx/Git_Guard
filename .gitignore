@@ -11,3 +11,5 @@ frontend/node_modules
 backend/DATA
 git_hook/chroma_db
 .venv/
+.git_guard/
+indexer_debug.log
