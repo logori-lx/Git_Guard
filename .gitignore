@@ -9,4 +9,5 @@ data_processing/DATA
 data_processing/API_KEY.txt
 frontend/node_modules
 backend/DATA
+git_hook/chroma_db
 .venv/
