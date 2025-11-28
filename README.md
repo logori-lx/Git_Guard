@@ -33,30 +33,45 @@
 
 Git-Guard 采用 **Client-Server (C/S)** 分离架构，兼顾了本地执行的低延迟与云端管理的统一性。
 
-```mermaid
 graph TD
     User[Developer] -->|git commit| Hook1[Pre-Commit Hook]
     User -->|git push| Hook2[Pre-Push Hook]
-    
-    subgraph Client [Local Environment]
+
+    %% 修复点：给标签内容加上双引号 "..." 以支持括号和特殊字符
+    GenAI["☁️ External GenAI Service<br/>(ZhipuAI / LLM API)"]
+    style GenAI fill:#ff9900,stroke:#333,stroke-width:2px,color:white
+
+    subgraph Client [💻 Local Environment]
+        direction TB
         Hook1 --> Analyzer[Analyzer Script]
         Hook2 --> Indexer[Indexer Script]
-        Analyzer <--> LocalDB[(Local ChromaDB)]
-        Indexer -->|Update| LocalDB
+        
+        LocalDB[(Local ChromaDB)]
+        
+        %% 本地数据流
+        Analyzer <-->|Retrieve Context| LocalDB
+        Indexer -->|Update Index| LocalDB
+        
+        %% 唯一的 AI 交互
+        Analyzer <-->|Generate Suggestion| GenAI
     end
     
-    subgraph Server [Cloud Platform]
+    subgraph Server [🚀 Cloud Platform]
+        direction TB
         API[FastAPI Server]
         Dashboard[Vue3 Frontend]
         Scheduler[APScheduler CI]
         LogDB[(Commit Logs)]
+        CI_Env[CI Sandbox]
+        
+        %% 服务端逻辑
+        API <--> LogDB
+        Scheduler -->|Run Tests| CI_Env
     end
     
+    %% Client-Server 通信
     Analyzer -->|Fetch Rules| API
     Analyzer -->|Report Logs| API
-    API <--> LogDB
-    Scheduler -->|Run Tests| CI_Env[CI Sandbox]
-```
 
 -----
 
@@ -69,7 +84,7 @@ graph TD
   * Docker & Docker Compose (Optional for server deployment)
   * **ZhipuAI API Key** (Set as `ZHIPU_API_KEY` environment variable)
 
-### 🛠️ Server Deployment 
+###  Server Deployment 
 
 1.  **Clone the repository:**
 

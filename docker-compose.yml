@@ -9,7 +9,7 @@ services:
     volumes:
       - ./server:/app 
     environment:
-      - MEDICAL_RAG=${MEDICAL_RAG}
+      - ZHIPU_API_KEY=${ZHIPU_API_KEY}
 
   frontend:
     build: 

@@ -25,7 +25,7 @@ SERVER_BASE_URL = "http://localhost:8000"
 CONFIG_URL = f"{SERVER_BASE_URL}/api/v1/config"
 TRACK_URL = f"{SERVER_BASE_URL}/api/v1/track"
 
-API_KEY = os.getenv("MEDICAL_RAG")
+API_KEY = os.getenv("ZHIPU_API_KEY")
 
 try:
     repo_obj = Repo(".", search_parent_directories=True)

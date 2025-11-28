@@ -36,7 +36,7 @@ if not os.path.exists(GUARD_DIR):
     except: pass
 
 DB_PATH = os.path.join(GUARD_DIR, "chroma_db")
-API_KEY = os.getenv("MEDICAL_RAG") 
+API_KEY = os.getenv("ZHIPU_API_KEY") 
 
 EXT_TO_COLLECTION = {
     ".py": "repo_python", ".java": "repo_java", ".js": "repo_js",
