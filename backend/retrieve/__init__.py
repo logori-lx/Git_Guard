@@ -1,2 +1,0 @@
-def retrieval():
-    return None
